@@ -57,15 +57,19 @@ export async function main({
 
     // Extract information for all books
     const { books } = await page.extract({
-      instruction: "Extract all books from the webpage. Each book should be in a table row containing elements with class 'bookTitle' for the title and elements containing author information. Make sure to clean up any extra whitespace.",
+      instruction:
+        "Extract all books from the webpage. Each book should be in a table row containing elements with class 'bookTitle' for the title and elements containing author information. Make sure to clean up any extra whitespace.",
       schema: z.object({
-        books: z.array(
-          z.object({
-            title: z.string().describe("The title of the book"),
-            author: z.string().describe("The author of the book"),
-          })
-        ).describe("Array of all books found on the page"),
+        books: z
+          .array(
+            z.object({
+              title: z.string().describe("The title of the book"),
+              author: z.string().describe("The author of the book"),
+            })
+          )
+          .describe("Array of all books found on the page"),
       }),
+      useTextExtract: true, // NET NEW
     });
 
     // Log the extracted information
