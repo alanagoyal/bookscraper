@@ -7,7 +7,7 @@
  * npm run start -- --url="YOUR_URL_HERE"
  * ```
  */
-import { Page, BrowserContext, Stagehand } from "@browserbasehq/stagehand";   
+import { Page, BrowserContext, Stagehand } from "@browserbasehq/stagehand";
 import { z } from "zod";
 import chalk from "chalk";
 import dotenv from "dotenv";
@@ -47,13 +47,7 @@ export async function main({
     });
 
     // Navigate to the provided URL with a longer timeout
-    await page.goto(URL, { 
-      timeout: 60000,
-      waitUntil: 'networkidle'
-    });
-
-    // Wait for the book elements to be visible
-    await page.waitForSelector('.bookTitle', { timeout: 60000 });
+    await page.goto(URL);
 
     // Extract information for all books
     const { books } = await page.extract({
