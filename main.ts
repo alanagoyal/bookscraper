@@ -54,19 +54,6 @@ export async function generateGenreAndDescription(title: string, author: string)
   return result;
 }
 
-// Test function
-async function testGenerateGenreAndDescription() {
-  try {
-    const result = await generateGenreAndDescription("The Great Gatsby", "F. Scott Fitzgerald");
-    console.log("Test result:", result);
-  } catch (error) {
-    console.error("Test failed:", error);
-  }
-}
-
-// Run the test
-testGenerateGenreAndDescription();
-
 export async function main({
   page,
   context,
