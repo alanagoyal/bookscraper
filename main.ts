@@ -61,9 +61,9 @@ export async function main({
     // Navigate to the provided URL with a longer timeout
     await page.goto(URL);
 
-    // Extract the source name and URL
+    // Extract the source name
     const { sourceName } = await page.extract({
-      instruction: "Extract the name and URL of the website where the book recommendations are being shown.",
+      instruction: "Extract the name of the website where the book recommendations are being shown.",
       schema: z.object({
         sourceName: z.string().describe("The name of the website where the book recommendations are being shown"),
       }),
@@ -143,21 +143,60 @@ export async function main({
     // Insert books and create recommendations
     console.log(chalk.green("\nInserting books into database:"));
     for (const book of books) {
-      // Insert book
-      const bookId = uuidv4();
-      const { error: bookError } = await supabase
+      // Check if book already exists
+      const { data: existingBook, error: searchError } = await supabase
         .from('books')
-        .insert({
-          id: bookId,
-          title: book.title.trim(),
-          author: book.author.trim(),
-          genre: ['Unknown'],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+        .select('id')
+        .eq('title', book.title.trim())
+        .eq('author', book.author.trim())
+        .single();
 
-      if (bookError) {
-        console.error(chalk.red(`Error inserting book "${book.title}":`, bookError.message));
+      if (searchError && searchError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        console.error(chalk.red(`Error searching for book "${book.title}":`, searchError.message));
+        continue;
+      }
+
+      let bookId;
+      if (existingBook) {
+        // Use existing book's ID
+        bookId = existingBook.id;
+        console.log(chalk.blue(`Book "${book.title}" already exists, using existing record`));
+      } else {
+        // Create new book
+        bookId = uuidv4();
+        const { error: bookError } = await supabase
+          .from('books')
+          .insert({
+            id: bookId,
+            title: book.title.trim(),
+            author: book.author.trim(),
+            genre: ['Unknown'],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
+        if (bookError) {
+          console.error(chalk.red(`Error inserting book "${book.title}":`, bookError.message));
+          continue;
+        }
+      }
+
+      // Check if recommendation already exists
+      const { data: existingRec, error: recSearchError } = await supabase
+        .from('recommendations')
+        .select('id')
+        .eq('book_id', bookId)
+        .eq('person_id', personId)
+        .eq('source', sourceName)
+        .single();
+
+      if (recSearchError && recSearchError.code !== 'PGRST116') {
+        console.error(chalk.red(`Error searching for existing recommendation:`, recSearchError.message));
+        continue;
+      }
+
+      if (existingRec) {
+        console.log(chalk.blue(`Recommendation for "${book.title}" from ${sourceName} already exists`));
         continue;
       }
 
@@ -179,7 +218,7 @@ export async function main({
         continue;
       }
 
-      console.log(chalk.green(`✓ Successfully added "${book.title}" to database`));
+      console.log(chalk.green(`✓ Successfully ${existingBook ? 'added recommendation for' : 'added'} "${book.title}" to database`));
     }
 
     // Log total count
