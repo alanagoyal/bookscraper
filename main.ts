@@ -13,6 +13,7 @@ import chalk from "chalk";
 import dotenv from "dotenv";
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
+import { invoke } from "braintrust";
 
 dotenv.config();
 
@@ -35,6 +36,36 @@ interface Book {
   title: string;
   author: string;
 }
+
+export async function generateGenreAndDescription(title: string, author: string) {
+  const result = await invoke({
+    projectName: "booklist",
+    slug: "genre-and-description-0680",
+    input: {
+      title,
+      author
+    },
+    schema: z.object({
+      genre: z.array(z.string()),
+      description: z.string()
+    }),
+  });
+  console.log(result);
+  return result;
+}
+
+// Test function
+async function testGenerateGenreAndDescription() {
+  try {
+    const result = await generateGenreAndDescription("The Great Gatsby", "F. Scott Fitzgerald");
+    console.log("Test result:", result);
+  } catch (error) {
+    console.error("Test failed:", error);
+  }
+}
+
+// Run the test
+testGenerateGenreAndDescription();
 
 export async function main({
   page,
@@ -63,7 +94,7 @@ export async function main({
 
     // Extract the source name
     const { sourceName } = await page.extract({
-      instruction: "Extract the name of the website where the book recommendations are being shown.",
+      instruction: "Extract the name of the website where the book recommendations are being shown based on the page title or url.",
       schema: z.object({
         sourceName: z.string().describe("The name of the website where the book recommendations are being shown"),
       }),
@@ -74,7 +105,7 @@ export async function main({
 
     // Extract the person's name from the page
     const { personName } = await page.extract({
-      instruction: "Extract the name of the person whose book recommendations are being shown. This is likely in the page title or header.",
+      instruction: "Extract the name of the person whose book recommendations are being shown based on the page title or url.",
       schema: z.object({
         personName: z.string().describe("The full name of the person whose book recommendations are shown"),
       }),
@@ -151,34 +182,38 @@ export async function main({
         .eq('author', book.author.trim())
         .single();
 
-      if (searchError && searchError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
-        console.error(chalk.red(`Error searching for book "${book.title}":`, searchError.message));
+      if (searchError && searchError.code !== 'PGRST116') {
+        console.error(chalk.red(`Error searching for book "${book.title}": ${searchError.message}`));
         continue;
       }
 
       let bookId;
       if (existingBook) {
-        // Use existing book's ID
         bookId = existingBook.id;
-        console.log(chalk.blue(`Book "${book.title}" already exists, using existing record`));
+        console.log(chalk.blue(`Found existing book: ${book.title}`));
       } else {
-        // Create new book
-        bookId = uuidv4();
-        const { error: bookError } = await supabase
+        // Generate genre and description before inserting
+        const { genre, description } = await generateGenreAndDescription(book.title.trim(), book.author.trim());
+        
+        const newBookId = uuidv4();
+        const { error: bookInsertError } = await supabase
           .from('books')
           .insert({
-            id: bookId,
+            id: newBookId,
             title: book.title.trim(),
             author: book.author.trim(),
-            genre: ['Unknown'],
+            genre,
+            description,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
 
-        if (bookError) {
-          console.error(chalk.red(`Error inserting book "${book.title}":`, bookError.message));
+        if (bookInsertError) {
+          console.error(chalk.red(`Error inserting book "${book.title}": ${bookInsertError.message}`));
           continue;
         }
+        bookId = newBookId;
+        console.log(chalk.green(`Created new book: ${book.title}`));
       }
 
       // Check if recommendation already exists
@@ -191,7 +226,7 @@ export async function main({
         .single();
 
       if (recSearchError && recSearchError.code !== 'PGRST116') {
-        console.error(chalk.red(`Error searching for existing recommendation:`, recSearchError.message));
+        console.error(chalk.red(`Error searching for existing recommendation: ${recSearchError.message}`));
         continue;
       }
 
@@ -214,7 +249,7 @@ export async function main({
         });
 
       if (recError) {
-        console.error(chalk.red(`Error creating recommendation for "${book.title}":`, recError.message));
+        console.error(chalk.red(`Error creating recommendation for "${book.title}": ${recError.message}`));
         continue;
       }
 
