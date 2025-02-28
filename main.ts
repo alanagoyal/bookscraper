@@ -61,6 +61,17 @@ export async function main({
     // Navigate to the provided URL with a longer timeout
     await page.goto(URL);
 
+    // Extract the source name and URL
+    const { sourceName } = await page.extract({
+      instruction: "Extract the name and URL of the website where the book recommendations are being shown.",
+      schema: z.object({
+        sourceName: z.string().describe("The name of the website where the book recommendations are being shown"),
+      }),
+      useTextExtract: false, // Since we're extracting a short piece of text
+    });
+
+    console.log(chalk.blue("Found recommendations on:"), sourceName);
+
     // Extract the person's name from the page
     const { personName } = await page.extract({
       instruction: "Extract the name of the person whose book recommendations are being shown. This is likely in the page title or header.",
@@ -157,6 +168,7 @@ export async function main({
           id: uuidv4(),
           book_id: bookId,
           person_id: personId,
+          source: sourceName,
           source_link: URL,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
