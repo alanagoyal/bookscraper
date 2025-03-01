@@ -32,9 +32,25 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-interface Book {
-  title: string;
-  author: string;
+function stripUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    // Remove www. prefix and .com/.org etc suffix
+    return urlObj.hostname
+      .replace(/^www\./, '')
+      .replace(/\.(com|org|net|edu|gov|io)$/, '')
+      .split('.')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  } catch (e) {
+    // If URL parsing fails, return the original string
+    return url;
+  }
+}
+
+export async function getSourceName(url: string) {
+  const siteName = stripUrl(url);
+  return { siteName };
 }
 
 export async function generateGenreAndDescription(title: string, author: string) {
@@ -107,14 +123,9 @@ export async function main({
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2000); // Give time for dynamic content to load
 
-    // Extract the source name from the page
-    const { sourceName } = await page.extract({
-      instruction: "Extract the name of the website where the book recommendations are being shown based on the page title or url.",
-      schema: z.object({
-        sourceName: z.string().describe("The name of the website where the book recommendations are being shown"),
-      }),
-      useTextExtract: false,
-    });
+    // Extract the source name
+    const currentUrl = page.url();
+    const { siteName: sourceName } = await getSourceName(currentUrl);
 
     console.log(chalk.blue("Source:"), sourceName);
 
