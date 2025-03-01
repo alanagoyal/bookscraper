@@ -4,7 +4,7 @@
  * TO RUN THIS PROJECT:
  * ```
  * npm install
- * npm run start -- --url="YOUR_URL_HERE"
+ * npm run start -- --name="PERSON_NAME_HERE"
  * ```
  */
 import { Page, BrowserContext, Stagehand } from "@browserbasehq/stagehand";
@@ -19,8 +19,8 @@ dotenv.config();
 
 // Parse command line arguments
 const args = process.argv.slice(2);
-const urlArg = args.find(arg => arg.startsWith('--url='));
-const URL = urlArg ? urlArg.split('=')[1] : null;
+const nameArg = args.find(arg => arg.startsWith('--name='));
+const personName = nameArg ? nameArg.split('=')[1] : null;
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -63,12 +63,12 @@ export async function main({
   context: BrowserContext;
   stagehand: Stagehand;
 }) {
-  if (!URL) {
-    console.error(chalk.red("Please provide a URL to scrape using --url=<URL>"));
+  if (!personName) {
+    console.error(chalk.red("Please provide a name using --name=<NAME>"));
     return;
   }
 
-  console.log(chalk.green("Scraping URL:"), URL);
+  console.log(chalk.green("Searching for book recommendations by:"), personName);
 
   try {
     // Set a more realistic user agent
@@ -76,35 +76,47 @@ export async function main({
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     });
 
-    // Navigate to the provided URL with a longer timeout
-    await page.goto(URL);
+    // First, navigate to Google
+    await page.goto('https://www.google.com');
 
-    // Extract the source name
+    // Accept cookies if the dialog appears
+    const results = await page.observe("Click accept all cookies button if it exists");
+    if (results.length > 0) {
+      await page.act(results[0]);
+    }
+
+    // Search for book recommendations
+    const searchQuery = `${personName} book recommendations`;
+    await page.extract({
+      instruction: "Type into the Google search box",
+      schema: z.object({ success: z.boolean() }),
+      useTextExtract: false
+    });
+    await page.keyboard.type(searchQuery);
+    await page.keyboard.press('Enter');
+
+    // Wait for search results to load
+    await page.waitForSelector('#search');
+    await page.waitForTimeout(1500); // Give a moment for results to stabilize
+
+    // Click the first search result
+    const results2 = await page.observe("Click the first search result");
+    await page.act(results2[0]);
+
+    // Wait for content to be visible
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000); // Give time for dynamic content to load
+
+    // Extract the source name from the page
     const { sourceName } = await page.extract({
       instruction: "Extract the name of the website where the book recommendations are being shown based on the page title or url.",
       schema: z.object({
         sourceName: z.string().describe("The name of the website where the book recommendations are being shown"),
       }),
-      useTextExtract: false, // Since we're extracting a short piece of text
+      useTextExtract: false,
     });
 
-    console.log(chalk.blue("Found recommendations on:"), sourceName);
-
-    // Extract the person's name from the page
-    const { personName } = await page.extract({
-      instruction: "Extract the name of the person whose book recommendations are being shown based on the page title or url.",
-      schema: z.object({
-        personName: z.string().describe("The full name of the person whose book recommendations are shown"),
-      }),
-      useTextExtract: false, // Since we're extracting a short piece of text
-    });
-
-    if (!personName) {
-      console.error(chalk.red("Could not find the person's name on the page"));
-      return;
-    }
-
-    console.log(chalk.blue("Found recommendations for:"), personName);
+    console.log(chalk.blue("Source:"), sourceName);
 
     // Create or find the person first
     const { data: existingPerson, error: personQueryError } = await supabase
@@ -118,7 +130,7 @@ export async function main({
       return;
     }
 
-    let personId;
+    let personId: string;
     if (existingPerson) {
       personId = existingPerson.id;
       console.log(chalk.green(`Found existing entry for ${personName}`));
@@ -230,7 +242,7 @@ export async function main({
           book_id: bookId,
           person_id: personId,
           source: sourceName,
-          source_link: URL,
+          source_link: page.url(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
