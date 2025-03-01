@@ -14,6 +14,7 @@ import dotenv from "dotenv";
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { invoke } from "braintrust";
+import { initLogger } from "braintrust";
 
 dotenv.config();
 
@@ -21,6 +22,12 @@ dotenv.config();
 const args = process.argv.slice(2);
 const nameArg = args.find(arg => arg.startsWith('--name='));
 const personName = nameArg ? nameArg.split('=')[1] : null;
+
+// Braintrust logger
+initLogger({
+  projectName: "booklist",
+  apiKey: process.env.BRAINTRUST_API_KEY,
+});
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
