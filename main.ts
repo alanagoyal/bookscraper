@@ -55,6 +55,19 @@ function stripUrl(url: string): string {
   }
 }
 
+function toTitleCase(text: string): string {
+  // List of words that should not be capitalized (unless they're the first word)
+  const minorWords = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'if', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to', 'up', 'yet']);
+
+  return text.toLowerCase().split(' ').map((word, index) => {
+    // Always capitalize the first word, last word, or if it's not a minor word
+    if (index === 0 || !minorWords.has(word)) {
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    }
+    return word;
+  }).join(' ');
+}
+
 export async function getSourceName(url: string) {
   const siteName = stripUrl(url);
   return { siteName };
@@ -195,7 +208,7 @@ export async function main({
       const { data: existingBook, error: searchError } = await supabase
         .from('books')
         .select('id')
-        .eq('title', book.title.trim())
+        .eq('title', toTitleCase(book.title.trim()))
         .eq('author', book.author.trim())
         .single();
 
@@ -210,14 +223,14 @@ export async function main({
         console.log(chalk.blue(`Found existing book: ${book.title}`));
       } else {
         // Generate genre and description before inserting
-        const { genre, description } = await generateGenreAndDescription(book.title.trim(), book.author.trim());
+        const { genre, description } = await generateGenreAndDescription(toTitleCase(book.title.trim()), book.author.trim());
         
         const newBookId = uuidv4();
         const { error: bookInsertError } = await supabase
           .from('books')
           .insert({
             id: newBookId,
-            title: book.title.trim(),
+            title: toTitleCase(book.title.trim()),
             author: book.author.trim(),
             genre,
             description,
