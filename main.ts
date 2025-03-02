@@ -124,8 +124,8 @@ export async function main({
     // Search for book recommendations
     const searchQuery = `${personName} book recommendations`;
     await page.act("Type '" + searchQuery + "' into the Google search box");
-    await page.act("Press enter to search");
-    await page.act("Click the first search result");
+    await page.act("Click the Google search button");
+    await page.act("Click the first search result whose title contains 'book recommendations'");
 
     // Extract the source name
     const currentUrl = page.url();
@@ -133,7 +133,34 @@ export async function main({
 
     console.log(chalk.blue("Source:"), sourceName);
 
-    // Create or find the person first
+    // Extract information for all books
+    const { books } = await page.extract({
+      instruction:
+        "Look for a list or collection of book recommendations on the page. Only extract items that are clearly books being recommended. Each book should have both a title and author. Ignore any text that isn't clearly a book recommendation. For each book found:\n" +
+        "1. The title should be a proper book title (not article titles, headers, or navigation text)\n" +
+        "2. The author should be a person's name in a format like 'by [Author Name]' or similar\n" +
+        "3. Skip any items where you're not confident it's actually a book recommendation\n" +
+        "If you don't find any clear book recommendations on the page, return an empty array.",
+      schema: z.object({
+        books: z
+          .array(
+            z.object({
+              title: z.string().describe("The title of the book - must be an actual book title"),
+              author: z.string().describe("The author's name - must be a person's name"),
+            })
+          )
+          .describe("Array of book recommendations found on the page"),
+      }),
+      useTextExtract: true,
+    });
+
+    // Check if any books were found
+    if (!books || books.length === 0) {
+      console.log(chalk.yellow("No book recommendations found on this page."));
+      return;
+    }
+
+    // Only create/find person if we found book recommendations
     const { data: existingPerson, error: personQueryError } = await supabase
       .from('people')
       .select('id')
@@ -167,23 +194,6 @@ export async function main({
       personId = newPersonId;
       console.log(chalk.green(`Created new entry for ${personName}`));
     }
-
-    // Extract information for all books
-    const { books } = await page.extract({
-      instruction:
-        "Extract all books from the webpage. Each book should be in a table row containing elements with class 'bookTitle' for the title and elements containing author information. Make sure to clean up any extra whitespace.",
-      schema: z.object({
-        books: z
-          .array(
-            z.object({
-              title: z.string().describe("The title of the book"),
-              author: z.string().describe("The author of the book"),
-            })
-          )
-          .describe("Array of all books found on the page"),
-      }),
-      useTextExtract: true,
-    });
 
     // Insert books and create recommendations
     console.log(chalk.green("\nInserting books into database:"));
