@@ -123,25 +123,9 @@ export async function main({
 
     // Search for book recommendations
     const searchQuery = `${personName} book recommendations`;
-    await page.extract({
-      instruction: "Type into the Google search box",
-      schema: z.object({ success: z.boolean() }),
-      useTextExtract: false
-    });
-    await page.keyboard.type(searchQuery);
-    await page.keyboard.press('Enter');
-
-    // Wait for search results to load
-    await page.waitForSelector('#search');
-    await page.waitForTimeout(1500); // Give a moment for results to stabilize
-
-    // Click the first search result
-    const results2 = await page.observe("Click the first search result");
-    await page.act(results2[0]);
-
-    // Wait for content to be visible
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000); // Give time for dynamic content to load
+    await page.act("Type '" + searchQuery + "' into the Google search box");
+    await page.act("Press enter to search");
+    await page.act("Click the first search result");
 
     // Extract the source name
     const currentUrl = page.url();
