@@ -95,7 +95,6 @@ export async function generateGenreAndDescription(title: string, author: string)
       description: z.string()
     }),
   });
-  console.log(result);
   return result;
 }
 
@@ -138,7 +137,10 @@ export async function main({
 
     // Extract the source name
     const currentUrl = page.url();
-    const { siteName: sourceName } = await getSourceName(currentUrl);
+    const { siteName: sourceNameOriginal } = await getSourceName(currentUrl);
+    
+    // Replace Kevinrooke with Bookmarked
+    const sourceName = sourceNameOriginal === "Kevinrooke" ? "Bookmarked" : sourceNameOriginal;
 
     console.log(chalk.blue("Source:"), sourceName);
 
@@ -281,7 +283,7 @@ export async function main({
           book_id: bookId,
           person_id: personId,
           source: sourceName,
-          source_link: page.url(),
+          source_link: currentUrl,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
