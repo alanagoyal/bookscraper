@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { invoke } from "braintrust";
 import { initLogger } from "braintrust";
+import { findAmazonUrl } from './amazon-links.ts';
 
 dotenv.config();
 
@@ -66,6 +67,14 @@ function toTitleCase(text: string): string {
     }
     return word;
   }).join(' ');
+}
+
+function cleanAuthorName(author: string): string {
+  return author
+    .trim()
+    .replace(/^by\s+/i, '')  // Remove 'by ' prefix (case insensitive)
+    .replace(/\s+/g, ' ')    // Normalize whitespace
+    .trim();
 }
 
 export async function getSourceName(url: string) {
@@ -138,7 +147,7 @@ export async function main({
       instruction:
         "Look for a list or collection of book recommendations on the page. Only extract items that are clearly books being recommended. Each book should have both a title and author. Ignore any text that isn't clearly a book recommendation. For each book found:\n" +
         "1. The title should be a proper book title (not article titles, headers, or navigation text)\n" +
-        "2. The author should be a person's name in a format like 'by [Author Name]' or similar\n" +
+        "2. The author should be just the person's name without any prefix like 'by' or similar\n" +
         "3. Skip any items where you're not confident it's actually a book recommendation\n" +
         "If you don't find any clear book recommendations on the page, return an empty array.",
       schema: z.object({
@@ -197,37 +206,44 @@ export async function main({
 
     // Insert books and create recommendations
     console.log(chalk.green("\nInserting books into database:"));
+    const processedBooks = [];
     for (const book of books) {
-      // Check if book already exists
-      const { data: existingBook, error: searchError } = await supabase
+      // Check if book already exists by title and author (case insensitive)
+      const { data: existingBook, error: bookSearchError } = await supabase
         .from('books')
         .select('id')
-        .eq('title', toTitleCase(book.title.trim()))
-        .eq('author', book.author.trim())
+        .ilike('title', book.title.trim().toLowerCase())
+        .ilike('author', cleanAuthorName(book.author).toLowerCase())
         .single();
 
-      if (searchError && searchError.code !== 'PGRST116') {
-        console.error(chalk.red(`Error searching for book "${book.title}": ${searchError.message}`));
+      if (bookSearchError && bookSearchError.code !== 'PGRST116') {
+        console.error(chalk.red(`Error searching for existing book: ${bookSearchError.message}`));
         continue;
       }
 
       let bookId;
       if (existingBook) {
+        console.log(chalk.blue(`Book "${book.title}" already exists`));
         bookId = existingBook.id;
-        console.log(chalk.blue(`Found existing book: ${book.title}`));
       } else {
         // Generate genre and description before inserting
-        const { genre, description } = await generateGenreAndDescription(toTitleCase(book.title.trim()), book.author.trim());
+        const { genre, description } = await generateGenreAndDescription(toTitleCase(book.title.trim()), cleanAuthorName(book.author));
         
-        const newBookId = uuidv4();
+        // Find Amazon URL for the book
+        console.log(chalk.blue('Finding Amazon URL...'));
+        const amazonUrl = await findAmazonUrl(page, book.title, book.author);
+        console.log(amazonUrl ? chalk.green('Found Amazon URL') : chalk.yellow('No Amazon URL found'));
+        
+        bookId = uuidv4();
         const { error: bookInsertError } = await supabase
           .from('books')
           .insert({
-            id: newBookId,
+            id: bookId,
             title: toTitleCase(book.title.trim()),
-            author: book.author.trim(),
+            author: cleanAuthorName(book.author),
             genre,
             description,
+            amazon_url: amazonUrl,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
@@ -236,8 +252,6 @@ export async function main({
           console.error(chalk.red(`Error inserting book "${book.title}": ${bookInsertError.message}`));
           continue;
         }
-        bookId = newBookId;
-        console.log(chalk.green(`Created new book: ${book.title}`));
       }
 
       // Check if recommendation already exists
@@ -277,11 +291,12 @@ export async function main({
         continue;
       }
 
-      console.log(chalk.green(`✓ Successfully ${existingBook ? 'added recommendation for' : 'added'} "${book.title}" to database`));
+      console.log(chalk.green(`✓ Successfully added "${book.title}" to database`));
+      processedBooks.push(book);
     }
 
     // Log total count
-    console.log(chalk.green(`\nTotal books processed: ${books.length}`));
+    console.log(chalk.green(`\nTotal books processed: ${processedBooks.length}`));
 
   } catch (error) {
     console.error(chalk.red("Error occurred while scraping:"));
