@@ -132,7 +132,7 @@ export async function main({
     // Search for book recommendations
     const searchQuery = `${personName} book recommendations`;
     await page.act("Type '" + searchQuery + "' into the Google search box");
-    await page.act("Click the Google search button");
+    await page.act("Click the Google Search button");
     await page.act("Click the first search result whose title contains 'book recommendations'");
 
     // Extract the source name
