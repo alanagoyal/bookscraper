@@ -186,17 +186,19 @@ export async function main({
     // Extract information for all books
     const { books } = await page.extract({
       instruction:
-        "Look for a list or collection of book recommendations on the page. Only extract items that are clearly books being recommended. Each book should have both a title and author. Ignore any text that isn't clearly a book recommendation. For each book found:\n" +
+        "Look for a list or collection of book recommendations on the page. Only extract items that are clearly books being recommended. Each book must have both a title and author. For each book found:\n" +
         "1. The title should be a proper book title (not article titles, headers, or navigation text)\n" +
-        "2. The author should be just the person's name without any prefix like 'by' or similar\n" +
-        "3. Skip any items where you're not confident it's actually a book recommendation\n" +
-        "If you don't find any clear book recommendations on the page, return an empty array.",
+        "2. The author should be the actual writer of the book - NOT the person whose recommendations we're viewing\n" +
+        "3. The author should be just the person's name without any prefix like 'by' or similar\n" +
+        "4. Skip any items where you can't find both a clear book title AND its actual author\n" +
+        "5. Skip any items where the author name matches or is similar to the person whose recommendations we're viewing\n" +
+        "If you don't find any clear book recommendations with both title and author, return an empty array.",
       schema: z.object({
         books: z
           .array(
             z.object({
               title: z.string().describe("The title of the book - must be an actual book title"),
-              author: z.string().describe("The author's name - must be a person's name"),
+              author: z.string().describe("The actual author who wrote the book - must be a person's name and NOT the person whose recommendations we're viewing"),
             })
           )
           .describe("Array of book recommendations found on the page"),
