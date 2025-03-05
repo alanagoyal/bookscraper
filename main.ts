@@ -4,7 +4,7 @@
  * TO RUN THIS PROJECT:
  * ```
  * npm install
- * npm run start -- --name="PERSON_NAME_HERE"
+ * npm run start
  * ```
  */
 import { Page, BrowserContext, Stagehand } from "@browserbasehq/stagehand";
@@ -16,13 +16,41 @@ import { v4 as uuidv4 } from 'uuid';
 import { invoke } from "braintrust";
 import { initLogger } from "braintrust";
 import { findAmazonUrl } from './amazon-links.ts';
+import inquirer from 'inquirer';
 
 dotenv.config();
 
+async function promptUser() {
+  const answers = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'personName',
+      message: 'Enter the name of the person whose book recommendations you want to search for:',
+      validate: (input) => {
+        if (!input.trim()) {
+          return 'Name is required';
+        }
+        return true;
+      }
+    },
+    {
+      type: 'input',
+      name: 'targetUrl',
+      message: 'Enter a specific URL to scrape (optional, press Enter to skip):',
+    }
+  ]);
+
+  return {
+    personName: answers.personName.trim(),
+    targetUrl: answers.targetUrl.trim() || null
+  };
+}
+
 // Parse command line arguments
-const args = process.argv.slice(2);
-const nameArg = args.find(arg => arg.startsWith('--name='));
-const personName = nameArg ? nameArg.split('=')[1] : null;
+async function getArgs() {
+  const args = await promptUser();
+  return args;
+}
 
 // Braintrust logger
 initLogger({
@@ -107,36 +135,47 @@ export async function main({
   context: BrowserContext;
   stagehand: Stagehand;
 }) {
-  if (!personName) {
-    console.error(chalk.red("Please provide a name using --name=<NAME>"));
-    return;
-  }
-
-  console.log(chalk.green("Searching for book recommendations by:"), personName);
-
   try {
     // Set a more realistic user agent
     await context.setExtraHTTPHeaders({
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     });
 
-    // First, navigate to Google
-    await page.goto('https://www.google.com');
+    let currentUrl: string;
 
-    // Accept cookies if the dialog appears
-    const results = await page.observe("Click accept all cookies button if it exists");
-    if (results.length > 0) {
-      await page.act(results[0]);
+    const { personName, targetUrl } = await getArgs();
+
+    if (!personName) {
+      throw new Error('A name is required to search for book recommendations');
     }
 
-    // Search for book recommendations
-    const searchQuery = `${personName} book recommendations`;
-    await page.act("Type '" + searchQuery + "' into the Google search box");
-    await page.act("Click the Google Search button");
-    await page.act("Click the first search result whose title contains 'book recommendations'");
+    if (targetUrl) {
+      // If URL is provided, go directly to it
+      console.log(chalk.green("Going directly to URL:"), targetUrl);
+      await page.goto(targetUrl);
+      currentUrl = targetUrl;
+    } else {
+      // Search flow using person's name
+      console.log(chalk.green("Searching for book recommendations by:"), personName);
+
+      // First, navigate to Google
+      await page.goto('https://www.google.com');
+
+      // Accept cookies if the dialog appears
+      const results = await page.observe("Click accept all cookies button if it exists");
+      if (results.length > 0) {
+        await page.act(results[0]);
+      }
+
+      // Search for book recommendations
+      const searchQuery = `${personName} book recommendations`;
+      await page.act("Type '" + searchQuery + "' into the Google search box");
+      await page.act("Click the Google Search button");
+      await page.act("Click the first search result whose title contains 'book recommendations'");
+      currentUrl = page.url();
+    }
 
     // Extract the source name
-    const currentUrl = page.url();
     const { siteName: sourceNameOriginal } = await getSourceName(currentUrl);
     
     // Replace Kevinrooke with Bookmarked

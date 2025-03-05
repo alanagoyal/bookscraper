@@ -11,10 +11,12 @@
     "@browserbasehq/stagehand": "1.13.0",
     "@playwright/test": "^1.49.1",
     "@supabase/supabase-js": "^2.49.1",
+    "@types/inquirer": "^9.0.7",
     "boxen": "^8.0.1",
     "braintrust": "^0.0.184",
     "chalk": "^5.3.0",
     "dotenv": "^16.4.7",
+    "inquirer": "^12.4.2",
     "uuid": "^11.1.0",
     "zod": "^3.24.2"
   },
