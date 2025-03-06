@@ -126,6 +126,36 @@ export async function generateGenreAndDescription(title: string, author: string)
   return result;
 }
 
+async function findAndClickBookLink(page: Page, bookTitle: string) {
+  // Try different approaches to find the book link
+  const instructions = [
+    `Find and click the link or button that would take you to purchase or view "${bookTitle}" on Amazon`,
+    `Find and click the "Get on Amazon" or similar link for "${bookTitle}"`,
+    `Click the link that contains "${bookTitle}" and leads to Amazon`,
+    `Click any button or link that would take you to buy "${bookTitle}"`
+  ];
+
+  for (const instruction of instructions) {
+    try {
+      const results = await page.observe({
+        instruction,
+        onlyVisible: false,
+        returnAction: true
+      });
+
+      if (results && results.length > 0) {
+        await page.act(results[0]);
+        return true;
+      }
+    } catch (error) {
+      console.log(chalk.yellow(`Attempt failed with instruction: ${instruction}`));
+      continue;
+    }
+  }
+  
+  return false;
+}
+
 export async function main({
   page,
   context,
@@ -210,6 +240,25 @@ export async function main({
     if (!books || books.length === 0) {
       console.log(chalk.yellow("No book recommendations found on this page."));
       return;
+    }
+
+    // Process each book
+    for (const book of books) {
+      console.log(chalk.blue("\nProcessing book:"), chalk.white(book.title));
+      
+      // Try to find and click the book link
+      const linkFound = await findAndClickBookLink(page, book.title);
+      
+      if (linkFound) {        
+        // Store the Amazon URL
+        const amazonUrl = page.url();
+        console.log(chalk.green("Found Amazon link:"), amazonUrl);
+        
+        // Go back to the recommendations page
+        await page.goBack();
+      } else {
+        console.log(chalk.yellow(`Could not find Amazon link for: ${book.title}`));
+      }
     }
 
     // Only create/find person if we found book recommendations

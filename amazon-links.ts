@@ -1,5 +1,4 @@
 import { Stagehand } from "@browserbasehq/stagehand";
-import StagehandConfig from "./stagehand.config.js";
 import { z } from 'zod';
 
 export async function findAmazonUrl(page: Stagehand['page'], title: string, author: string) {
