@@ -50,6 +50,11 @@ function stripUrl(url: string): string {
   }
 }
 
+export function getSourceName(url: string): string {
+  const sourceNameOriginal = stripUrl(url);
+  return sourceNameOriginal === "Kevinrooke" ? "Bookmarked" : sourceNameOriginal;
+}
+
 function toTitleCase(text: string): string {
   const minorWords = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'if', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to', 'up', 'yet']);
   return text.toLowerCase().split(' ').map((word, index) => {
@@ -362,7 +367,7 @@ export async function main({
     const currentUrl = targetUrl;
 
     // Extract source information
-    const sourceName = stripUrl(currentUrl);
+    const sourceName = getSourceName(currentUrl);
     console.log(chalk.blue("Source:"), sourceName);
 
     // Extract social links
