@@ -84,14 +84,8 @@ async function promptUser() {
   const answers = await inquirer.prompt([
     {
       type: 'input',
-      name: 'personName',
-      message: 'Enter the name of the person whose book recommendations you want to scrape:',
-      validate: (input) => input.trim() ? true : 'Name is required'
-    },
-    {
-      type: 'input',
-      name: 'targetUrl',
-      message: 'Enter the URL of the book recommendations page:',
+      name: 'mainUrl',
+      message: 'Enter the URL of the main book recommenders page:',
       validate: (input) => {
         if (!input.trim()) {
           return 'URL is required';
@@ -107,15 +101,11 @@ async function promptUser() {
   ]);
 
   return {
-    personName: answers.personName.trim(),
-    targetUrl: answers.targetUrl.trim()
+    mainUrl: answers.mainUrl.trim()
   };
 }
 
 async function extractSocialLinks(page: Page): Promise<SocialLinks> {
-  const socialLinks: SocialLinks = {};
-
-  // Extract href attributes from X Profile and Wikipedia links
   const { links } = await page.extract({
     instruction: "Find the URLs from the X Profile and Wikipedia buttons/links in the profile section",
     schema: z.object({
@@ -124,8 +114,10 @@ async function extractSocialLinks(page: Page): Promise<SocialLinks> {
         url: z.string()
       }))
     }),
-    useTextExtract: false
+    useTextExtract: false  // Set false since we're extracting small pieces of data (URLs)
   });
+
+  const socialLinks: SocialLinks = {};
 
   for (const link of links) {
     if (link.text.toLowerCase().includes('x profile') || link.text.toLowerCase().includes('twitter')) {
@@ -154,6 +146,24 @@ async function extractBookRecommendations(page: Page, personName: string) {
     useTextExtract: true
   });
   return books;
+}
+
+async function extractRecommendersList(page: Page) {
+  const { recommenders } = await page.extract({
+    instruction: "Find all book recommenders listed on the page. Get their names only.",
+    schema: z.object({
+      recommenders: z.array(z.object({
+        name: z.string()
+      }))
+    }),
+    useTextExtract: false
+  });
+  return recommenders;
+}
+
+async function navigateToRecommenderProfile(page: Page, recommenderName: string): Promise<string> {
+  await page.act(`Click on ${recommenderName}'s profile or name`);
+  return page.url();
 }
 
 async function findOrCreatePerson(personName: string, socialLinks: SocialLinks) {
@@ -358,52 +368,83 @@ export async function main({
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     });
 
-    // Get user input
-    const { personName, targetUrl } = await promptUser();
+    // Get main recommenders page URL
+    const { mainUrl } = await promptUser();
+    console.log(chalk.green("Going to main URL:"), mainUrl);
+    await page.goto(mainUrl);
 
-    // Navigate to target page
-    console.log(chalk.green("Going to URL:"), targetUrl);
-    await page.goto(targetUrl);
-    const currentUrl = targetUrl;
+    // Extract all recommenders
+    console.log(chalk.blue("Extracting recommenders list..."));
+    const recommenders = await extractRecommendersList(page);
 
-    // Extract source information
-    const sourceName = getSourceName(currentUrl);
-    console.log(chalk.blue("Source:"), sourceName);
-
-    // Extract social links
-    console.log(chalk.blue("Extracting social links..."));
-    const socialLinks = await extractSocialLinks(page);
-
-    // Extract book recommendations
-    console.log(chalk.blue("Extracting book recommendations..."));
-    const books = await extractBookRecommendations(page, personName);
-
-    if (!books || books.length === 0) {
-      console.log(chalk.yellow("No book recommendations found on this page."));
+    if (!recommenders || recommenders.length === 0) {
+      console.log(chalk.yellow("No recommenders found on the main page."));
       return;
     }
 
-    // Create/find person record
-    console.log(chalk.blue("Processing recommender information..."));
-    const personId = await findOrCreatePerson(personName, socialLinks);
+    console.log(chalk.green(`Found ${recommenders.length} recommenders`));
 
-    // Process books and create recommendations
-    console.log(chalk.green("\nProcessing books..."));
-    for (const book of books) {
+    // Process each recommender
+    for (const recommender of recommenders) {
       try {
-        console.log(chalk.blue("\nProcessing:"), chalk.white(book.title));
+        console.log(chalk.blue("\nProcessing recommender:"), chalk.white(recommender.name));
         
-        const bookId = await findOrCreateBook(page, book);
-        await createRecommendation(bookId, personId, sourceName, currentUrl);
+        // Navigate to recommender's profile by clicking their name
+        console.log(chalk.blue("Navigating to recommender's profile..."));
+        const currentUrl = await navigateToRecommenderProfile(page, recommender.name);
         
-        console.log(chalk.green(`✓ Successfully processed "${book.title}"`));
+        // Extract source information
+        const sourceName = getSourceName(currentUrl);
+        console.log(chalk.blue("Source:"), sourceName);
+
+        // Extract social links
+        console.log(chalk.blue("Extracting social links..."));
+        const socialLinks = await extractSocialLinks(page);
+
+        // Extract book recommendations
+        console.log(chalk.blue("Extracting book recommendations..."));
+        const books = await extractBookRecommendations(page, recommender.name);
+
+        if (!books || books.length === 0) {
+          console.log(chalk.yellow("No book recommendations found for this recommender."));
+          // Go back to main page before continuing to next recommender
+          await page.goto(mainUrl);
+          continue;
+        }
+
+        // Create/find person record
+        console.log(chalk.blue("Processing recommender information..."));
+        const personId = await findOrCreatePerson(recommender.name, socialLinks);
+
+        // Process books and create recommendations
+        console.log(chalk.green("\nProcessing books..."));
+        for (const book of books) {
+          try {
+            console.log(chalk.blue("\nProcessing:"), chalk.white(book.title));
+            
+            const bookId = await findOrCreateBook(page, book);
+            await createRecommendation(bookId, personId, sourceName, currentUrl);
+            
+            console.log(chalk.green(`✓ Successfully processed "${book.title}"`));
+          } catch (error) {
+            console.error(chalk.red(`Error processing "${book.title}"`));
+            continue;
+          }
+        }
+
+        console.log(chalk.green(`\nTotal books processed for ${recommender.name}: ${books.length}`));
+
+        // Go back to main page before continuing to next recommender
+        await page.goto(mainUrl);
+
       } catch (error) {
-        console.error(chalk.red(`Error processing "${book.title}"`));
+        console.error(chalk.red(`Error processing recommender "${recommender.name}":`));
+        console.error(error);
+        // Try to go back to main page before continuing
+        await page.goto(mainUrl);
         continue;
       }
     }
-
-    console.log(chalk.green(`\nTotal books processed: ${books.length}`));
 
   } catch (error) {
     console.error(chalk.red("Error occurred:"));
