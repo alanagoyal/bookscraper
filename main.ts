@@ -156,7 +156,7 @@ async function extractRecommendersList(page: Page) {
         name: z.string()
       }))
     }),
-    useTextExtract: false
+    useTextExtract: true
   });
   return recommenders;
 }
@@ -201,6 +201,20 @@ async function findOrCreatePerson(personName: string, socialLinks: SocialLinks) 
 
   console.log(chalk.green(`Created new entry for ${personName}`));
   return newPersonId;
+}
+
+async function checkExistingPerson(personName: string) {
+  const { data: existingPerson, error: personQueryError } = await supabase
+    .from('people')
+    .select('id')
+    .eq('full_name', personName)
+    .single();
+
+  if (personQueryError && personQueryError.code !== 'PGRST116') {
+    throw new Error(`Error finding person "${personName}": ${personQueryError.message}`);
+  }
+
+  return existingPerson?.id;
 }
 
 async function findAmazonUrlOnPage(page: Page, book: { title: string, author: string }): Promise<string | null> {
@@ -373,7 +387,7 @@ export async function main({
     console.log(chalk.green("Going to main URL:"), mainUrl);
     await page.goto(mainUrl);
 
-    // Extract all recommenders
+    // Extract all recommenders first and check existing entries
     console.log(chalk.blue("Extracting recommenders list..."));
     const recommenders = await extractRecommendersList(page);
 
@@ -383,11 +397,40 @@ export async function main({
     }
 
     console.log(chalk.green(`Found ${recommenders.length} recommenders`));
+    
+    // Check which recommenders are already in the database
+    console.log(chalk.blue("\nChecking existing recommenders in database..."));
+    const recommenderStatus = await Promise.all(
+      recommenders.map(async (recommender) => {
+        const existingId = await checkExistingPerson(recommender.name);
+        return {
+          ...recommender,
+          exists: !!existingId,
+          id: existingId
+        };
+      })
+    );
+
+    // Log the plan
+    console.log(chalk.blue("\nProcessing plan:"));
+    recommenderStatus.forEach(recommender => {
+      if (recommender.exists) {
+        console.log(chalk.yellow(`- ${recommender.name} (already in database)`));
+      } else {
+        console.log(chalk.green(`- ${recommender.name} (will process)`));
+      }
+    });
 
     // Process each recommender
-    for (const recommender of recommenders) {
+    for (const recommender of recommenderStatus) {
       try {
         console.log(chalk.blue("\nProcessing recommender:"), chalk.white(recommender.name));
+        
+        // If recommender already exists, skip unless user wants to update
+        if (recommender.exists) {
+          console.log(chalk.yellow(`Skipping ${recommender.name} - already in database`));
+          continue;
+        }
         
         // Navigate to recommender's profile by clicking their name
         console.log(chalk.blue("Navigating to recommender's profile..."));
