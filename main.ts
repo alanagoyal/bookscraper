@@ -273,22 +273,29 @@ async function findAmazonUrlOnPage(page: Page, book: { title: string, author: st
 }
 
 async function findOrCreateBook(page: Page, book: { title: string, author: string }) {
-  const { data: existingBook, error: bookSearchError } = await supabase
-    .from('books')
-    .select('id')
-    .ilike('title', book.title.trim().toLowerCase())
-    .ilike('author', cleanAuthorName(book.author).toLowerCase())
-    .single();
+  // Check for similar books using pg_trgm
+  console.log(chalk.blue("Checking for similar books:"), chalk.gray(`"${book.title}" by ${book.author}`));
+  
+  const { data: similarBooks, error: similarBooksError } = await supabase
+    .rpc('find_similar_books', {
+      p_title: book.title.trim(),
+      p_author: cleanAuthorName(book.author)
+    });
 
-  if (bookSearchError && bookSearchError.code !== 'PGRST116') {
-    throw new Error(`Error searching for book: ${bookSearchError.message}`);
+  if (similarBooksError) {
+    console.error(chalk.red("Similar books check failed:"), similarBooksError);
+    throw new Error(`Error checking for similar books: ${similarBooksError.message}`);
   }
 
-  if (existingBook) {
-    console.log(chalk.blue(`Book "${book.title}" already exists`));
-    return existingBook.id;
+  if (similarBooks && similarBooks.length > 0) {
+    const similarBook = similarBooks[0];
+    console.log(chalk.yellow(`Found similar book: "${similarBook.title}" by ${similarBook.author}`));
+    console.log(chalk.gray(`Title similarity: ${(similarBook.title_similarity * 100).toFixed(1)}%`));
+    console.log(chalk.gray(`Author similarity: ${(similarBook.author_similarity * 100).toFixed(1)}%`));
+    return similarBook.id;
   }
 
+  // If no similar matches found, proceed with creating the new book
   const { genre, description } = await generateGenreAndDescription(
     toTitleCase(book.title.trim()),
     cleanAuthorName(book.author)
@@ -470,7 +477,7 @@ export async function main({
             
             console.log(chalk.green(`✓ Successfully processed "${book.title}"`));
           } catch (error) {
-            console.error(chalk.red(`Error processing "${book.title}"`));
+            console.error(chalk.red(`Error processing "${book.title}":`), error);
             continue;
           }
         }
