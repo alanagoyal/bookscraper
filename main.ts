@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { invoke } from "braintrust";
 import { initLogger } from "braintrust";
 import inquirer from 'inquirer';
+import readline from 'readline';
 
 dotenv.config();
 
@@ -431,11 +432,29 @@ export async function main({
     // Process each recommender
     for (const recommender of recommenderStatus) {
       try {
-        console.log(chalk.blue("\nProcessing recommender:"), chalk.white(recommender.name));
+        console.log(chalk.blue("\nFound recommender:"), chalk.white(recommender.name));
         
         // If recommender already exists, skip unless user wants to update
         if (recommender.exists) {
-          console.log(chalk.yellow(`Skipping ${recommender.name} - already in database`));
+          console.log(chalk.yellow(`${recommender.name} is already in database`));
+          continue;
+        }
+
+        // Ask user if they want to process this recommender
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+
+        const shouldProcess = await new Promise<boolean>((resolve) => {
+          rl.question(chalk.yellow(`\nDo you want to process ${recommender.name}? (y/n): `), (answer) => {
+            rl.close();
+            resolve(answer.toLowerCase() === 'y');
+          });
+        });
+
+        if (!shouldProcess) {
+          console.log(chalk.yellow(`Skipping ${recommender.name} by user request`));
           continue;
         }
         
