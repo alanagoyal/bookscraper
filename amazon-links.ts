@@ -23,8 +23,8 @@ async function getBooks() {
   const { data: books, error } = await supabase
     .from('books')
     .select('id, title, author')
-    .gte('created_at', '2025-03-07T18:53:53.916Z')
-    .lte('created_at', '2025-03-10T18:15:56.615Z');
+    .gte('created_at', '2025-03-06T19:59:03.517Z')
+    .lte('created_at', '2025-03-07T18:03:02.905Z');
   
   if (error) throw error;
   return books;
@@ -105,7 +105,7 @@ async function run() {
 
   try {
     const books = await getBooks();
-    console.log(chalk.blue(`Found ${books.length} books between Mar 7-10, 2025`));
+    console.log(chalk.blue(`Found ${books.length} books between Mar 6-7, 2025`));
 
     for (const book of books) {
       console.log(chalk.yellow(`Processing: ${book.title} by ${book.author}`));
