@@ -218,59 +218,24 @@ async function checkExistingPerson(personName: string) {
   return existingPerson?.id;
 }
 
-async function findAmazonUrlOnPage(page: Page, book: { title: string, author: string }): Promise<string | null> {
-  try {
-    // First try to extract any Amazon links directly
-    const { links } = await page.extract({
-      instruction: `Find any Amazon purchase links for the book "${book.title}" by ${book.author}. Only return links that go to Amazon.com.`,
-      schema: z.object({
-        links: z.array(z.string())
-      }),
-      useTextExtract: false
-    });
+export async function findAmazonUrl(page: Stagehand['page'], title: string, author: string) {
+  await page.goto('https://www.google.com');
+  
+  // Search for book on Google
+  const searchQuery = `${title} ${author} amazon`;
+  await page.act("Type '" + searchQuery + "' into the search input");
+  await page.act("Press Enter");
 
-    if (links && links.length > 0) {
-      return links[0];
-    }
+  // Extract the first Amazon link
+  const { links } = await page.extract({
+    instruction: "Extract the first link that contains 'amazon.com'",
+    schema: z.object({
+      links: z.array(z.string())
+    }),
+    useTextExtract: false
+  });
 
-    // If no direct links found, try to find and click a link that might lead to purchase options
-    const results = await page.observe({
-      instruction: `Find and click a link or button that would take you to purchase "${book.title}" by ${book.author}, preferably on Amazon`,
-      onlyVisible: false,
-      returnAction: true
-    });
-
-    if (results && results.length > 0) {
-      await page.act(results[0]);
-      
-      // Check if we landed on an Amazon page
-      const currentUrl = page.url();
-      if (currentUrl.includes('amazon.com')) {
-        return currentUrl;
-      }
-      
-      // If not on Amazon, try to find an Amazon link on this new page
-      const { links: newLinks } = await page.extract({
-        instruction: "Find any Amazon.com purchase links on this page",
-        schema: z.object({
-          links: z.array(z.string())
-        }),
-        useTextExtract: false
-      });
-      
-      // Go back to the original page
-      await page.goBack();
-      
-      if (newLinks && newLinks.length > 0) {
-        return newLinks[0];
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.log(chalk.yellow(`Could not find Amazon link for "${book.title}"`));
-    return null;
-  }
+  return links[0] || null;
 }
 
 async function findOrCreateBook(page: Page, book: { title: string, author: string }) {
@@ -303,7 +268,7 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
   );
 
   console.log(chalk.blue('Finding Amazon URL...'));
-  const amazonUrl = await findAmazonUrlOnPage(page, book);
+  const amazonUrl = await findAmazonUrl(page, book.title, book.author);
   console.log(amazonUrl ? chalk.green('Found Amazon URL') : chalk.yellow('No Amazon URL found'));
 
   const bookId = uuidv4();
