@@ -74,10 +74,8 @@ function cleanAuthorName(author: string): string {
     .trim();
 }
 
-interface SocialLinks {
-  twitter_url?: string;
-  wiki_url?: string;
-  website_url?: string;
+function getBasicTitle(title: string): string {
+  return title.split(':')[0].trim();
 }
 
 // Core Functions
@@ -106,29 +104,66 @@ async function promptUser() {
   };
 }
 
-async function extractSocialLinks(page: Page): Promise<SocialLinks> {
-  const { links } = await page.extract({
-    instruction: "Find the URLs from the X Profile and Wikipedia buttons/links in the profile section",
+export async function findSocialUrl(page: Stagehand['page'], personName: string): Promise<string | null> {
+  // First try Twitter
+  await page.goto('https://www.google.com');
+  const twitterQuery = `${personName} twitter profile`;
+  
+  const results = await page.observe(`Type '${twitterQuery}' into the search input`);
+  await page.act(results[0]);
+  await page.act('Press Enter');
+
+  const { links: twitterLinks } = await page.extract({
+    instruction: "Extract the first link that contains 'twitter.com' or 'x.com'",
     schema: z.object({
-      links: z.array(z.object({
-        text: z.string(),
-        url: z.string()
-      }))
+      links: z.array(z.string())
     }),
-    useTextExtract: false  // Set false since we're extracting small pieces of data (URLs)
+    useTextExtract: true
   });
 
-  const socialLinks: SocialLinks = {};
-
-  for (const link of links) {
-    if (link.text.toLowerCase().includes('x profile') || link.text.toLowerCase().includes('twitter')) {
-      socialLinks.twitter_url = link.url;
-    } else if (link.text.toLowerCase().includes('wikipedia')) {
-      socialLinks.wiki_url = link.url;
-    }
+  if (twitterLinks[0]) {
+    console.log(chalk.cyan(`\nFound Twitter profile: ${twitterLinks[0]}`));
+    const { confirm } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'confirm',
+        message: 'Is this the correct Twitter profile?'
+      }
+    ]);
+    
+    if (confirm) return twitterLinks[0];
   }
 
-  return socialLinks;
+  // Try Wikipedia if Twitter wasn't found or was rejected
+  await page.goto('https://www.google.com');
+  const wikiQuery = `${personName} wikipedia`;
+  
+  const wikiResults = await page.observe(`Type '${wikiQuery}' into the search input`);
+  await page.act(wikiResults[0]);
+  await page.act('Press Enter');
+
+  const { links: wikiLinks } = await page.extract({
+    instruction: "Extract the first link that contains 'wikipedia.org'",
+    schema: z.object({
+      links: z.array(z.string())
+    }),
+    useTextExtract: true
+  });
+
+  if (wikiLinks[0]) {
+    console.log(chalk.cyan(`\nFound Wikipedia page: ${wikiLinks[0]}`));
+    const { confirm } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'confirm',
+        message: 'Is this the correct Wikipedia page?'
+      }
+    ]);
+    
+    if (confirm) return wikiLinks[0];
+  }
+
+  return null;
 }
 
 async function extractBookRecommendations(page: Page, personName: string) {
@@ -167,7 +202,7 @@ async function navigateToRecommenderProfile(page: Page, recommenderName: string)
   return page.url();
 }
 
-async function findOrCreatePerson(personName: string, socialLinks: SocialLinks) {
+async function findOrCreatePerson(personName: string, url: string | null) {
   const { data: existingPerson, error: personQueryError } = await supabase
     .from('people')
     .select('id')
@@ -189,9 +224,7 @@ async function findOrCreatePerson(personName: string, socialLinks: SocialLinks) 
     .insert({
       id: newPersonId,
       full_name: personName,
-      twitter_url: socialLinks.twitter_url,
-      wiki_url: socialLinks.wiki_url,
-      website_url: socialLinks.website_url,
+      url,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
@@ -232,7 +265,7 @@ export async function findAmazonUrl(page: Stagehand['page'], title: string, auth
     schema: z.object({
       links: z.array(z.string())
     }),
-    useTextExtract: false
+    useTextExtract: true
   });
 
   return links[0] || null;
@@ -244,7 +277,7 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
   
   const { data: similarBooks, error: similarBooksError } = await supabase
     .rpc('find_similar_books', {
-      p_title: book.title.trim(),
+      p_title: getBasicTitle(book.title.trim()),
       p_author: cleanAuthorName(book.author)
     });
 
@@ -431,9 +464,12 @@ export async function main({
         const sourceName = getSourceName(currentUrl);
         console.log(chalk.blue("Source:"), sourceName);
 
-        // Extract social links
-        console.log(chalk.blue("Extracting social links..."));
-        const socialLinks = await extractSocialLinks(page);
+        // Find social URL (Twitter or Wikipedia)
+        console.log(chalk.blue("Finding social URL..."));
+        const socialUrl = await findSocialUrl(page, recommender.name);
+
+        // Go back to recommender's profile
+        await page.goto(currentUrl);
 
         // Extract book recommendations
         console.log(chalk.blue("Extracting book recommendations..."));
@@ -448,7 +484,7 @@ export async function main({
 
         // Create/find person record
         console.log(chalk.blue("Processing recommender information..."));
-        const personId = await findOrCreatePerson(recommender.name, socialLinks);
+        const personId = await findOrCreatePerson(recommender.name, socialUrl);
 
         // Process books and create recommendations
         console.log(chalk.green("\nProcessing books..."));
