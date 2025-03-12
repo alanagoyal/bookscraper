@@ -22,7 +22,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function getBooks() {
   const { data: books, error } = await supabase
     .from('books')
-    .select('id, title, author')
+    .select('id, title, author, amazon_url')
+    .is('amazon_url', null)
     .gte('created_at', '2025-03-06T19:59:03.517Z')
     .lte('created_at', '2025-03-07T18:03:02.905Z');
   
@@ -105,7 +106,14 @@ async function run() {
 
   try {
     const books = await getBooks();
-    console.log(chalk.blue(`Found ${books.length} books between Mar 6-7, 2025`));
+    console.log(chalk.blue(`Found ${books.length} books without Amazon URLs between Mar 6-7, 2025`));
+    
+    // Print all book titles first
+    console.log(chalk.cyan('\nBooks to process:'));
+    books.forEach((book, index) => {
+      console.log(chalk.cyan(`${index + 1}. ${book.title} by ${book.author}`));
+    });
+    console.log(); // Empty line for better readability
 
     for (const book of books) {
       console.log(chalk.yellow(`Processing: ${book.title} by ${book.author}`));
