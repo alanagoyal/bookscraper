@@ -114,7 +114,7 @@ export async function findSocialUrl(page: Stagehand['page'], personName: string)
   await page.act('Press Enter');
 
   const { links: twitterLinks } = await page.extract({
-    instruction: "Extract the first link that contains 'twitter.com' or 'x.com'",
+    instruction: "Extract the first link that contains 'twitter' or 'x'. Make sure it is a valid URL.",
     schema: z.object({
       links: z.array(z.string())
     }),
@@ -143,7 +143,7 @@ export async function findSocialUrl(page: Stagehand['page'], personName: string)
   await page.act('Press Enter');
 
   const { links: wikiLinks } = await page.extract({
-    instruction: "Extract the first link that contains 'wikipedia.org'",
+    instruction: "Extract the first link that contains 'wikipedia'. Make sure it is a valid URL.",
     schema: z.object({
       links: z.array(z.string())
     }),
@@ -185,15 +185,15 @@ async function extractBookRecommendations(page: Page, personName: string) {
 }
 
 async function extractRecommendersList(page: Page) {
-  const { recommenders } = await page.extract({
-    instruction: "Find all book recommenders listed on the page. Get their names only.",
-    schema: z.object({
-      recommenders: z.array(z.object({
-        name: z.string()
-      }))
-    }),
-    useTextExtract: true
-  });
+    const { recommenders } = await page.extract({
+      instruction: "Find all book recommenders listed on the page. Get their names only.",
+      schema: z.object({
+        recommenders: z.array(z.object({
+          name: z.string()
+        }))
+      }),
+      useTextExtract: true
+    });
   return recommenders;
 }
 
@@ -259,16 +259,16 @@ export async function findAmazonUrl(page: Stagehand['page'], title: string, auth
   await page.act("Type '" + searchQuery + "' into the search input");
   await page.act("Press Enter");
 
-  // Extract the first Amazon link
-  const { links } = await page.extract({
-    instruction: "Extract the first link that contains 'amazon.com'",
+  // Extract the first Amazon link with proper URL
+  const { amazonUrl } = await page.extract({
+    instruction: "Extract the href attribute of the first link that contains 'amazon.com' in its URL. Make sure it is a valid URL.",
     schema: z.object({
-      links: z.array(z.string())
+      amazonUrl: z.string().url()
     }),
     useTextExtract: true
   });
 
-  return links[0] || null;
+  return amazonUrl || null;
 }
 
 async function findOrCreateBook(page: Page, book: { title: string, author: string }) {
