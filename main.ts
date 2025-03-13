@@ -263,7 +263,7 @@ export async function findAmazonUrl(page: Stagehand['page'], title: string, auth
   const { amazonUrl } = await page.extract({
     instruction: "Extract the href attribute of the first link that contains 'amazon.com' in its URL. Make sure it is a valid URL.",
     schema: z.object({
-      amazonUrl: z.string().url()
+      amazonUrl: z.string()
     }),
     useTextExtract: true
   });
