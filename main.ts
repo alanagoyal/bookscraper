@@ -138,9 +138,7 @@ async function promptUser() {
   };
 }
 
-export async function findSocialUrl(page: Stagehand['page'], personName: string): Promise<string | null> {
-  console.log(chalk.blue(`\nFinding social URL for: ${personName}`));
-  
+export async function findSocialUrl(page: Stagehand['page'], personName: string): Promise<string | null> {  
   // First try Twitter
   await page.goto('https://www.google.com');
   const twitterQuery = `${personName} twitter profile`;
