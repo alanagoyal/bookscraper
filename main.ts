@@ -218,20 +218,20 @@ async function extractBookRecommendations(page: Page, personName: string) {
         author: z.string(),
       }))
     }),
-    useTextExtract: true
+    useTextExtract: true // Use HTML parsing instead of text extraction
   });
   return books;
 }
 
 async function extractRecommendersList(page: Page) {
     const { recommenders } = await page.extract({
-      instruction: "Find all book recommenders listed on the page. Get their names only.",
+      instruction: "Find the first 100 book recommenders listed on the page. Get their names only.",
       schema: z.object({
         recommenders: z.array(z.object({
           name: z.string()
         }))
       }),
-      useTextExtract: true
+      useTextExtract: false // Use HTML parsing instead of text extraction
     });
   return recommenders;
 }
@@ -541,6 +541,9 @@ async function processRecommender(page: Page, recommenderName: string, currentUr
 
   // Go back to recommender's profile
   await page.goto(currentUrl);
+
+  // Set 2 seconds delay
+  await page.waitForTimeout(2000);
 
   // Extract book recommendations
   console.log(chalk.blue("Extracting book recommendations..."));
