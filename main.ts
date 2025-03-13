@@ -148,12 +148,15 @@ export async function findSocialUrl(page: Stagehand['page'], personName: string)
   await page.act(`Type '${twitterQuery}' into the search input`);
   await page.act('Press Enter');
 
+  // Set timeout for 2 seconds
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
   const { links: twitterLinks } = await page.extract({
     instruction: "Extract the first link that contains 'twitter' or 'x'. Make sure it is a valid URL.",
     schema: z.object({
       links: z.array(z.string())
     }),
-    useTextExtract: true
+    useTextExtract: false
   });
 
   if (twitterLinks[0]) {
@@ -175,13 +178,15 @@ export async function findSocialUrl(page: Stagehand['page'], personName: string)
   
   await page.act(`Type '${wikiQuery}' into the search input`);
   await page.act('Press Enter');
+  // set timeout for 2 seconds
+  await new Promise(resolve => setTimeout(resolve, 2000));
 
   const { links: wikiLinks } = await page.extract({
     instruction: "Extract the first link that contains 'wikipedia'. Make sure it is a valid URL.",
     schema: z.object({
       links: z.array(z.string())
     }),
-    useTextExtract: true
+    useTextExtract: false
   });
 
   if (wikiLinks[0]) {
@@ -293,13 +298,16 @@ export async function findAmazonUrl(page: Stagehand['page'], title: string, auth
   await page.act("Type '" + searchQuery + "' into the search input");
   await page.act("Press Enter");
 
+  // Set timeout for 2 seconds
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
   // Extract the first Amazon link with proper URL
   const { amazonUrl } = await page.extract({
     instruction: "Extract the href attribute of the first link that contains 'amazon.com' in its URL. Make sure it is a valid URL.",
     schema: z.object({
       amazonUrl: z.string()
     }),
-    useTextExtract: true
+    useTextExtract: false
   });
 
   return amazonUrl || null;
