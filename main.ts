@@ -159,13 +159,17 @@ export async function findSocialUrl(page: Stagehand['page'], personName: string)
 
   if (twitterLinks[0]) {
     console.log(chalk.cyan(`\nFound Twitter profile: ${twitterLinks[0]}`));
-    const { confirm } = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'confirm',
-        message: 'Is this the correct Twitter profile?'
-      }
-    ]);
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    const confirm = await new Promise<boolean>((resolve) => {
+      rl.question(chalk.yellow(`Is this the correct Twitter profile? (y/n): `), (answer) => {
+        rl.close();
+        resolve(answer.toLowerCase() === 'y');
+      });
+    });
     
     if (confirm) return twitterLinks[0];
   }
@@ -189,13 +193,17 @@ export async function findSocialUrl(page: Stagehand['page'], personName: string)
 
   if (wikiLinks[0]) {
     console.log(chalk.cyan(`\nFound Wikipedia page: ${wikiLinks[0]}`));
-    const { confirm } = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'confirm',
-        message: 'Is this the correct Wikipedia page?'
-      }
-    ]);
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    const confirm = await new Promise<boolean>((resolve) => {
+      rl.question(chalk.yellow(`Is this the correct Wikipedia page? (y/n): `), (answer) => {
+        rl.close();
+        resolve(answer.toLowerCase() === 'y');
+      });
+    });
     
     if (confirm) return wikiLinks[0];
   }
@@ -223,7 +231,7 @@ async function extractBookRecommendations(page: Page, personName: string) {
 
 async function extractRecommendersList(page: Page) {
     const { recommenders } = await page.extract({
-      instruction: "Find the first 250 book recommenders listed on the page. Get their names only.",
+      instruction: "Find the first 400 book recommenders listed on the page. Get their names only.",
       schema: z.object({
         recommenders: z.array(z.object({
           name: z.string()
