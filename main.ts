@@ -223,7 +223,7 @@ async function extractBookRecommendations(page: Page, personName: string) {
 
 async function extractRecommendersList(page: Page) {
     const { recommenders } = await page.extract({
-      instruction: "Find the first 100 book recommenders listed on the page. Get their names only.",
+      instruction: "Find the first 250 book recommenders listed on the page. Get their names only.",
       schema: z.object({
         recommenders: z.array(z.object({
           name: z.string()
@@ -312,7 +312,25 @@ export async function findAmazonUrl(page: Stagehand['page'], title: string, auth
 }
 
 async function findOrCreateBook(page: Page, book: { title: string, author: string }) {
-  // Check for similar books using pg_trgm
+  // First check for exact match
+  const { data: exactMatch, error: exactMatchError } = await supabase
+    .from('books')
+    .select('id')
+    .eq('title', toTitleCase(book.title.trim()))
+    .eq('author', cleanAuthorName(book.author))
+    .single();
+
+  if (exactMatchError && exactMatchError.code !== 'PGRST116') {
+    console.error(chalk.red("Exact match check failed:"), exactMatchError);
+    throw new Error(`Error checking for exact book match: ${exactMatchError.message}`);
+  }
+
+  if (exactMatch) {
+    console.log(chalk.yellow(`Found exact match for book: "${book.title}" by ${book.author}`));
+    return exactMatch.id;
+  }
+
+  // If no exact match, check for similar books using pg_trgm
   console.log(chalk.blue("Checking for similar books:"), chalk.gray(`"${book.title}" by ${book.author}`));
   
   const { data: similarBooks, error: similarBooksError } = await supabase
