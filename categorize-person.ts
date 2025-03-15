@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { initLogger, invoke } from 'braintrust';
 import dotenv from 'dotenv';
+import { type } from 'os';
 import { z } from 'zod';
 
 dotenv.config();
@@ -27,7 +28,7 @@ async function categorizePerson(person: string) {
     slug: "categorize-person-7bb3",
     input: { person },
     schema: z.object({
-      type: z.string()
+      category: z.string()
     }),
   });
   return result;
@@ -52,13 +53,13 @@ async function run() {
     // Process each person
     for (const person of people || []) {
       try {
-        const { type } = await categorizePerson(person.full_name);
-        console.log(`${person.full_name} -> ${type}`);
+        const { category } = await categorizePerson(person.full_name);
+        console.log(`${person.full_name} -> ${category}`);
 
-        // Update the type
+        // Update the category
         const { error: updateError } = await supabase
           .from('people')
-          .update({ type })
+          .update({ type: category })
           .eq('id', person.id);
         
         if (updateError) {
