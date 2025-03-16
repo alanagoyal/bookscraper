@@ -263,6 +263,9 @@ async function findOrCreatePerson(personName: string, url: string | null) {
     return existingPerson.id;
   }
 
+  const { category: type } = await categorizePerson(personName);
+  console.log(chalk.blue(`Categorized ${personName} as: ${type}`));
+
   const newPersonId = uuidv4();
   const { error: personInsertError } = await supabase
     .from('people')
@@ -270,6 +273,7 @@ async function findOrCreatePerson(personName: string, url: string | null) {
       id: newPersonId,
       full_name: personName,
       url,
+      type,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
@@ -294,6 +298,18 @@ async function checkExistingPerson(personName: string) {
   }
 
   return existingPerson?.id;
+}
+
+async function categorizePerson(person: string) {
+  const result = await invoke({
+    projectName: "booklist",
+    slug: "categorize-person-7bb3",
+    input: { person },
+    schema: z.object({
+      category: z.string()
+    }),
+  });
+  return result;
 }
 
 export async function findAmazonUrl(page: Stagehand['page'], title: string, author: string) {
