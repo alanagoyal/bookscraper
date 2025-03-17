@@ -231,7 +231,7 @@ async function extractBookRecommendations(page: Page, personName: string) {
 
 async function extractRecommendersList(page: Page) {
     const { recommenders } = await page.extract({
-      instruction: "Find the first 400 book recommenders listed on the page. Get their names only.",
+      instruction: "Extract the first 250 people on the website. Get their names only.",
       schema: z.object({
         recommenders: z.array(z.object({
           name: z.string()
@@ -250,7 +250,7 @@ async function navigateToRecommenderProfile(page: Page, recommenderName: string)
 async function findOrCreatePerson(personName: string, url: string | null) {
   const { data: existingPerson, error: personQueryError } = await supabase
     .from('people')
-    .select('id')
+    .select('id, url, type')
     .eq('full_name', personName)
     .single();
 
@@ -260,6 +260,23 @@ async function findOrCreatePerson(personName: string, url: string | null) {
 
   if (existingPerson) {
     console.log(chalk.green(`Found existing entry for ${personName}`));
+    
+    // Update the person's information if needed
+    if (url && url !== existingPerson.url) {
+      const { error: updateError } = await supabase
+        .from('people')
+        .update({
+          url,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingPerson.id);
+
+      if (updateError) {
+        throw new Error(`Error updating person "${personName}": ${updateError.message}`);
+      }
+      console.log(chalk.blue(`Updated social URL for ${personName}`));
+    }
+    
     return existingPerson.id;
   }
 
@@ -413,7 +430,6 @@ async function createRecommendation(bookId: string, personId: string, source: st
     .select('id')
     .eq('book_id', bookId)
     .eq('person_id', personId)
-    .eq('source', source)
     .single();
 
   if (recSearchError && recSearchError.code !== 'PGRST116') {
@@ -421,7 +437,7 @@ async function createRecommendation(bookId: string, personId: string, source: st
   }
 
   if (existingRec) {
-    console.log(chalk.blue(`Recommendation already exists`));
+    console.log(chalk.yellow(`Skipping: Recommendation already exists for this book and person`));
     return;
   }
 
@@ -515,20 +531,18 @@ export async function main({
         try {
           console.log(chalk.blue("\nFound recommender:"), chalk.white(recommender.name));
           
-          // If recommender already exists, skip unless user wants to update
-          if (recommender.exists) {
-            console.log(chalk.yellow(`${recommender.name} is already in database`));
-            continue;
-          }
-
           // Ask user if they want to process this recommender
           const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout
           });
 
+          const promptMessage = recommender.exists 
+            ? chalk.yellow(`\n${recommender.name} is already in database. Do you want to update their information and add new recommendations? (y/n): `)
+            : chalk.yellow(`\nDo you want to process ${recommender.name}? (y/n): `);
+
           const shouldProcess = await new Promise<boolean>((resolve) => {
-            rl.question(chalk.yellow(`\nDo you want to process ${recommender.name}? (y/n): `), (answer) => {
+            rl.question(promptMessage, (answer) => {
               rl.close();
               resolve(answer.toLowerCase() === 'y');
             });
@@ -575,15 +589,25 @@ async function processRecommender(page: Page, recommenderName: string, currentUr
   const sourceName = getSourceName(currentUrl);
   console.log(chalk.blue("Source:"), sourceName);
 
-  // Find social URL (Twitter or Wikipedia)
-  console.log(chalk.blue("Finding social URL..."));
-  const socialUrl = await findSocialUrl(page, recommenderName);
+  // Check if recommender exists in database
+  const { data: existingPerson } = await supabase
+    .from('people')
+    .select('id, url')
+    .eq('full_name', recommenderName)
+    .single();
 
-  // Go back to recommender's profile
-  await page.goto(currentUrl);
-
-  // Set 2 seconds delay
-  await page.waitForTimeout(2000);
+  let socialUrl = null;
+  if (!existingPerson) {
+    // Only find social URL for new recommenders
+    console.log(chalk.blue("Finding social URL..."));
+    socialUrl = await findSocialUrl(page, recommenderName);
+    
+    // Go back to recommender's profile
+    await page.goto(currentUrl);
+    
+    // Set 2 seconds delay
+    await page.waitForTimeout(2000);
+  }
 
   // Extract book recommendations
   console.log(chalk.blue("Extracting book recommendations..."));
@@ -598,7 +622,7 @@ async function processRecommender(page: Page, recommenderName: string, currentUr
 
   // Create/find person record
   console.log(chalk.blue("Processing recommender information..."));
-  const personId = await findOrCreatePerson(recommenderName, socialUrl);
+  const personId = existingPerson ? existingPerson.id : await findOrCreatePerson(recommenderName, socialUrl);
 
   // Process books and create recommendations
   console.log(chalk.green("\nProcessing books..."));
