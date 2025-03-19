@@ -113,6 +113,45 @@ function getBasicTitle(title: string): string {
   return title.split(':')[0].trim();
 }
 
+function standardizeTwitterUrl(url: string): string {
+  if (!url) return '';
+  
+  // Only process Twitter/X URLs
+  if (!url.toLowerCase().includes('twitter.com') && !url.toLowerCase().includes('x.com')) {
+    return url;
+  }
+  
+  try {
+    // If it's a full URL, parse it and extract just the username
+    if (url.startsWith('http')) {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/').filter(part => part);
+      // If we have a username in the path, use it
+      if (pathParts.length > 0) {
+        return `https://x.com/${pathParts[0]}`;
+      }
+    }
+    
+    // If it's just a username (with or without @)
+    if (url.match(/^@?[a-zA-Z0-9_]+$/)) {
+      return `https://x.com/${url.replace('@', '')}`;
+    }
+    
+    // Try to extract username from twitter.com/username format
+    const match = url.match(/(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]+)/i);
+    if (match && match[1]) {
+      return `https://x.com/${match[1]}`;
+    }
+    
+    // If we can't parse it in any known format, return unchanged
+    return url;
+    
+  } catch (error) {
+    // If URL parsing fails, return unchanged
+    return url;
+  }
+}
+
 // Core Functions
 async function promptUser() {
   const urlType = await inquirer.prompt([
@@ -298,10 +337,11 @@ async function findOrCreatePerson(personName: string, url: string | null) {
     
     // Update the person's information if needed
     if (url && url !== existingPerson.url) {
+      const standardizedUrl = standardizeTwitterUrl(url);
       const { error: updateError } = await supabase
         .from('people')
         .update({
-          url,
+          url: standardizedUrl,
           updated_at: new Date().toISOString()
         })
         .eq('id', existingPerson.id);
@@ -309,7 +349,7 @@ async function findOrCreatePerson(personName: string, url: string | null) {
       if (updateError) {
         throw new Error(`Error updating person "${personName}": ${updateError.message}`);
       }
-      console.log(chalk.blue(`Updated social URL for ${personName}`));
+      console.log(chalk.blue(`Updated social URL for ${personName} to ${standardizedUrl}`));
     }
     
     return existingPerson.id;
@@ -319,12 +359,13 @@ async function findOrCreatePerson(personName: string, url: string | null) {
   console.log(chalk.blue(`Categorized ${personName} as: ${type}`));
 
   const newPersonId = uuidv4();
+  const standardizedUrl = url ? standardizeTwitterUrl(url) : null;
   const { error: personInsertError } = await supabase
     .from('people')
     .insert({
       id: newPersonId,
       full_name: personName,
-      url,
+      url: standardizedUrl,
       type,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -334,7 +375,7 @@ async function findOrCreatePerson(personName: string, url: string | null) {
     throw new Error(`Error creating person "${personName}": ${personInsertError.message}`);
   }
 
-  console.log(chalk.green(`Created new entry for ${personName}`));
+  console.log(chalk.green(`Created new entry for ${personName}${standardizedUrl ? ` with URL ${standardizedUrl}` : ''}`));
   return newPersonId;
 }
 
