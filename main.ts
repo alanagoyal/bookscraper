@@ -84,9 +84,21 @@ function toTitleCase(text: string): string {
     const leadingPunct = leadingPunctMatch?.[1] || '';
     word = leadingPunctMatch?.[2] || word;
 
-    // Capitalize as needed
-    if (capitalizeNext || !minorWords.has(word)) {
-      word = word.charAt(0).toUpperCase() + word.slice(1);
+    // Handle hyphenated words
+    if (word.includes('-')) {
+      const hyphenatedParts = word.split('-');
+      word = hyphenatedParts.map((part, idx) => {
+        // Always capitalize first part, or if it's not a minor word
+        if (idx === 0 ? capitalizeNext : !minorWords.has(part)) {
+          return part.charAt(0).toUpperCase() + part.slice(1);
+        }
+        return part;
+      }).join('-');
+    } else {
+      // Capitalize as needed
+      if (capitalizeNext || !minorWords.has(word)) {
+        word = word.charAt(0).toUpperCase() + word.slice(1);
+      }
     }
 
     // Re-add leading punctuation
@@ -305,7 +317,7 @@ async function extractBookRecommendations(page: Page, personName: string) {
 
 async function extractRecommendersList(page: Page) {
     const { recommenders } = await page.extract({
-      instruction: "Extract the first 3000 people on the website. Get their names only.",
+      instruction: "Extract the first 5000 people on the website. Get their names only.",
       schema: z.object({
         recommenders: z.array(z.object({
           name: z.string()
