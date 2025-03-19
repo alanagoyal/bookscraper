@@ -19,7 +19,7 @@ function toTitleCase(text: string): string {
   const minorWords = new Set([
     'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for',
     'if', 'in', 'nor', 'of', 'on', 'or', 'so', 'the',
-    'to', 'up', 'yet'
+    'to', 'yet'
   ]);
   const punctuationTriggers = new Set([':', '(', '[', '{', '"', '\'', '—', '–']); // dash types too
 

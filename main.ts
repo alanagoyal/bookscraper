@@ -60,7 +60,7 @@ function toTitleCase(text: string): string {
   const minorWords = new Set([
     'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for',
     'if', 'in', 'nor', 'of', 'on', 'or', 'so', 'the',
-    'to', 'up', 'yet'
+    'to', 'yet'
   ]);
   const punctuationTriggers = new Set([':', '(', '[', '{', '"', '\'', '—', '–']); // dash types too
 
@@ -266,7 +266,7 @@ async function extractBookRecommendations(page: Page, personName: string) {
 
 async function extractRecommendersList(page: Page) {
     const { recommenders } = await page.extract({
-      instruction: "Extract the first 250 people on the website. Get their names only.",
+      instruction: "Extract the first 3000 people on the website. Get their names only.",
       schema: z.object({
         recommenders: z.array(z.object({
           name: z.string()
