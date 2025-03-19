@@ -56,61 +56,16 @@ export function getSourceName(url: string): string {
   return sourceNameOriginal === "Kevinrooke" ? "Bookmarked" : sourceNameOriginal;
 }
 
-function toTitleCase(text: string): string {
-  const minorWords = new Set([
-    'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for',
-    'if', 'in', 'nor', 'of', 'on', 'or', 'so', 'the',
-    'to', 'yet'
-  ]);
-  const punctuationTriggers = new Set([':', '(', '[', '{', '"', '\'', '—', '–']); // dash types too
-
-  const words = text.toLowerCase().split(/\s+/); // split on spaces
-  let result = [];
-  let capitalizeNext = true; // first word should be capitalized
-
-  for (let i = 0; i < words.length; i++) {
-    let word = words[i];
-
-    // Check if previous word ends with punctuation that triggers capitalization
-    if (i > 0) {
-      const lastCharPrevWord = words[i - 1].slice(-1);
-      if (punctuationTriggers.has(lastCharPrevWord)) {
-        capitalizeNext = true;
-      }
-    }
-
-    // Remove leading punctuation from word for checking
-    const leadingPunctMatch = word.match(/^([(\[{"']*)(.*)$/);
-    const leadingPunct = leadingPunctMatch?.[1] || '';
-    word = leadingPunctMatch?.[2] || word;
-
-    // Handle hyphenated words
-    if (word.includes('-')) {
-      const hyphenatedParts = word.split('-');
-      word = hyphenatedParts.map((part, idx) => {
-        // Always capitalize first part, or if it's not a minor word
-        if (idx === 0 ? capitalizeNext : !minorWords.has(part)) {
-          return part.charAt(0).toUpperCase() + part.slice(1);
-        }
-        return part;
-      }).join('-');
-    } else {
-      // Capitalize as needed
-      if (capitalizeNext || !minorWords.has(word)) {
-        word = word.charAt(0).toUpperCase() + word.slice(1);
-      }
-    }
-
-    // Re-add leading punctuation
-    word = leadingPunct + word;
-    result.push(word);
-
-    // Determine if next word should be capitalized
-    const lastChar = word.slice(-1);
-    capitalizeNext = punctuationTriggers.has(lastChar);
-  }
-
-  return result.join(' ');
+async function sanitizeTitle(title: string) {
+  const result = await invoke({
+    projectName: "booklist",
+    slug: "sanitize-title-fc91",
+    input: { title },
+    schema: z.object({
+      title: z.string()
+    }),
+  });
+  return result.title;
 }
 
 function cleanAuthorName(author: string): string {
@@ -367,7 +322,7 @@ async function findOrCreatePerson(personName: string, url: string | null) {
     return existingPerson.id;
   }
 
-  const { category: type } = await categorizePerson(personName);
+  const { type } = await categorizePerson(personName);
   console.log(chalk.blue(`Categorized ${personName} as: ${type}`));
 
   const newPersonId = uuidv4();
@@ -411,7 +366,7 @@ async function categorizePerson(person: string) {
     slug: "categorize-person-7bb3",
     input: { person },
     schema: z.object({
-      category: z.string()
+      type: z.string()
     }),
   });
   return result;
@@ -441,12 +396,15 @@ export async function findAmazonUrl(page: Stagehand['page'], title: string, auth
 }
 
 async function findOrCreateBook(page: Page, book: { title: string, author: string }) {
+  const cleanedAuthor = cleanAuthorName(book.author);
+  const sanitizedTitle = await sanitizeTitle(book.title.trim());
+
   // First check for exact match
   const { data: exactMatch, error: exactMatchError } = await supabase
     .from('books')
     .select('id')
-    .eq('title', toTitleCase(book.title.trim()))
-    .eq('author', cleanAuthorName(book.author))
+    .eq('title', sanitizedTitle)
+    .eq('author', cleanedAuthor)
     .single();
 
   if (exactMatchError && exactMatchError.code !== 'PGRST116') {
@@ -483,33 +441,33 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
 
   // If no similar matches found, proceed with creating the new book
   const { genre, description } = await generateGenreAndDescription(
-    toTitleCase(book.title.trim()),
-    cleanAuthorName(book.author)
+    sanitizedTitle,
+    cleanedAuthor
   );
 
   console.log(chalk.blue('Finding Amazon URL...'));
-  const amazonUrl = await findAmazonUrl(page, book.title, book.author);
+  const amazonUrl = await findAmazonUrl(page, sanitizedTitle, cleanedAuthor);
   console.log(amazonUrl ? chalk.green('Found Amazon URL') : chalk.yellow('No Amazon URL found'));
 
   const bookId = uuidv4();
-  const { error: bookInsertError } = await supabase
+  const { data: newBook, error: createError } = await supabase
     .from('books')
     .insert({
       id: bookId,
-      title: toTitleCase(book.title.trim()),
-      author: cleanAuthorName(book.author),
+      title: sanitizedTitle,
+      author: cleanedAuthor,
       genre,
       description,
-      amazon_url: amazonUrl,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
+      amazon_url: amazonUrl
+    })
+    .select()
+    .single();
 
-  if (bookInsertError) {
-    throw new Error(`Error inserting book "${book.title}": ${bookInsertError.message}`);
+  if (createError) {
+    throw new Error(`Error inserting book "${book.title}": ${createError.message}`);
   }
 
-  return bookId;
+  return newBook.id;
 }
 
 async function createRecommendation(bookId: string, personId: string, source: string, sourceLink: string) {

@@ -28,7 +28,7 @@ async function categorizePerson(person: string) {
     slug: "categorize-person-7bb3",
     input: { person },
     schema: z.object({
-      category: z.string()
+      type: z.string()
     }),
   });
   return result;
@@ -53,13 +53,13 @@ async function run() {
     // Process each person
     for (const person of people || []) {
       try {
-        const { category } = await categorizePerson(person.full_name);
-        console.log(`${person.full_name} -> ${category}`);
+        const { type } = await categorizePerson(person.full_name);
+        console.log(`${person.full_name} -> ${type}`);
 
         // Update the category
         const { error: updateError } = await supabase
           .from('people')
-          .update({ type: category })
+          .update({ type })
           .eq('id', person.id);
         
         if (updateError) {
