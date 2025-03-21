@@ -17,18 +17,25 @@ import { invoke } from "braintrust";
 import { initLogger } from "braintrust";
 import inquirer from 'inquirer';
 import readline from 'readline';
+import OpenAI from 'openai';
 
 dotenv.config();
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const openaiKey = process.env.OPENAI_API_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in environment variables');
 }
 
+if (!openaiKey) {
+  throw new Error('Missing OPENAI_API_KEY in environment variables');
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
+const openai = new OpenAI({ apiKey: openaiKey });
 
 // Initialize Braintrust logger
 initLogger({
@@ -65,14 +72,20 @@ async function sanitizeTitle(title: string) {
       title: z.string()
     }),
   });
-  return result.title;
+  return result;
 }
 
 function cleanAuthorName(author: string): string {
   return author
     .trim()
     .replace(/^by\s+/i, '')
+    // Add period after single letter followed by space
+    .replace(/\b([A-Z])\s+/g, '$1. ')
     .replace(/\s+/g, ' ')
+    // Title case each word
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
     .trim();
 }
 
@@ -272,7 +285,7 @@ async function extractBookRecommendations(page: Page, personName: string) {
 
 async function extractRecommendersList(page: Page) {
     const { recommenders } = await page.extract({
-      instruction: "Extract the first 5000 people on the website. Get their names only.",
+      instruction: "Extract ALL of the names on the website. Get their names only.",
       schema: z.object({
         recommenders: z.array(z.object({
           name: z.string()
@@ -403,7 +416,7 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
   const { data: exactMatch, error: exactMatchError } = await supabase
     .from('books')
     .select('id')
-    .eq('title', sanitizedTitle)
+    .eq('title', sanitizedTitle.title)
     .eq('author', cleanedAuthor)
     .single();
 
@@ -441,24 +454,30 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
 
   // If no similar matches found, proceed with creating the new book
   const { genre, description } = await generateGenreAndDescription(
-    sanitizedTitle,
+    sanitizedTitle.title,
     cleanedAuthor
   );
 
   console.log(chalk.blue('Finding Amazon URL...'));
-  const amazonUrl = await findAmazonUrl(page, sanitizedTitle, cleanedAuthor);
+  const amazonUrl = await findAmazonUrl(page, sanitizedTitle.title, cleanedAuthor);
   console.log(amazonUrl ? chalk.green('Found Amazon URL') : chalk.yellow('No Amazon URL found'));
+
+  // Create embedding for the new book
+  console.log(chalk.blue('Creating embedding...'));
+  const embedding = await createEmbedding(sanitizedTitle.title, cleanedAuthor);
+  console.log(chalk.green('Embedding created'));
 
   const bookId = uuidv4();
   const { data: newBook, error: createError } = await supabase
     .from('books')
     .insert({
       id: bookId,
-      title: sanitizedTitle,
+      title: sanitizedTitle.title,
       author: cleanedAuthor,
       genre,
       description,
-      amazon_url: amazonUrl
+      amazon_url: amazonUrl,
+      embedding
     })
     .select()
     .single();
@@ -468,6 +487,16 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
   }
 
   return newBook.id;
+}
+
+async function createEmbedding(title: string, author: string) {
+  const text = `${title} by ${author}`;
+  const response = await openai.embeddings.create({
+    model: "text-embedding-ada-002",
+    input: text,
+  });
+  
+  return response.data[0].embedding;
 }
 
 async function createRecommendation(bookId: string, personId: string, source: string, sourceLink: string) {
@@ -540,7 +569,114 @@ export async function main({
     if (urlType === 'collection') {
       // Original flow for collection of recommenders
       console.log(chalk.blue("Extracting recommenders list..."));
-      const recommenders = await extractRecommendersList(page);
+      const recommenders = [
+        "Elon Musk", "Mark Zuckerberg", "Jeff Bezos", "Sheryl Sandberg", "Warren Buffett", "Bill Gates", 
+        "Steve Jobs", "Tim Cook", "Satya Nadella", "Emma Stone", "Tony Robbins", "Larry Page", 
+        "J.K. Rowling", "Mark Cuban", "Peter Thiel", "Eric Schmidt", "Tom Hanks", "Taylor Swift", 
+        "Mahatma Gandhi", "Alexis Ohanian", "Madonna Louise Ciccone", "Will Smith", "Richard Branson", 
+        "Margot Robbie", "Nelson Mandela", "Rupert Murdoch", "Gordon Ramsay", "Rana Daggubati", 
+        "Jennifer Lawrence", "Smriti Z Irani", "Bill Clinton", "Jimmy Fallon", "Pau Gasol", 
+        "Scarlett Johansson", "Jonathan Ross", "Narendra Modi", "Emma Watson", "Russell Brand", 
+        "Neil Degrasse Tyson", "Piers Morgan", "Al Yankovic", "Angelina Jolie", "Chris Pratt", 
+        "Malala Yousafzai", "Barack Obama", "Tim Ferriss", "Jack Ma", "Daymond John", 
+        "Charlie Munger", "Oprah Winfrey", "Dan Ariely", "Seth Godin", "Fearne Cotton", 
+        "Jack Dorsey", "Ben Horowitz", "Drew Huston", "Sam Altman", "Michelle Obama", 
+        "Simon Sinek", "Steve Blank", "Marissa Mayer", "Daniel Kahneman", "Guy Kawasaki", 
+        "Danielle Morrill", "Malcolm Gladwell", "Reid Hoffman", "Gary Vaynerchuk", 
+        "James Altucher", "Charlize Theron", "Mike Weinberg", "Andrew Chen", "Ken Norton", 
+        "Nir Eyal", "Julie Zhuo", "Chris Messina", "Jeff Atwood", "Angela Merkel", 
+        "Jim Collins", "Robin Sharma", "Michael Bloomberg", "Dustin Moskovitz", 
+        "Caroline Weber", "Marshall Goldsmith", "Christina Tosi", "Vinod Khosla", 
+        "Arnold Schwarzenegger", "Pat Flynn", "Brian Tracy", "Ryan Holiday", 
+        "Donna Strickland", "Brad Feld", "Bill Gurley", "Jane Goodall", "Jim Rohn", 
+        "David Heinemeier Hansson", "Ash Maurya", "Ron Conway", "Laura Ingraham", 
+        "Leo Babauta", "Jakob Nielsen", "Meredith Kessler", "Tomasz Tunguz", 
+        "Max Levchin", "Meryl Streep", "Rand Fishkin", "Dan Pink", "David Allen", 
+        "Marty Cagan", "Mirinda Carfrae", "Tim O'Reilly", "John Doerr", "Ryan Hoover", 
+        "Tony Hsieh", "Natalie Portman", "Noah Kagan", "Michael Hyatt", 
+        "Pascaline Lepeltier", "Ev Williams", "Sam Hurley", "Ken Blanchard", 
+        "Joel Spolsky", "Rosanne Cash", "Ashton Kutcher", "Serena Williams", 
+        "Fred Wilson", "Hunter Walk", "Casey Neistat", "Jason Fried", "Aaron Levie", 
+        "Susan Wojcicki", "Sean Ellis", "Naval Ravikant", "Susie Moore", "Andy Grove", 
+        "Geoffrey James", "Kevin Rose", "Amir Taheri", "Tiffany Gill", 
+        "Andreas Eenfeldt", "Andrew Napolitano", "Wendy Williams", "Bob Dylan", 
+        "Bruce Springsteen", "Reese Witherspoon", "Chris Evans", "Dan Schawbel", 
+        "Daniel Pink", "Dave McGillivray", "Hillary Clinton", "Dave Ramsey", 
+        "Dave Ulrich", "Denny Emerson", "Donald Trump", "Jillian Michaels", 
+        "Dwayne Johnson", "Dwight Garner", "Demi Lovato", "Eric Smiley", 
+        "Gary Keller", "Geno Auriemma", "George Stephanopoulos", "Arianna Huffington", 
+        "Gilbert Strang", "Shannon Watts", "Hector Garcia", "Herbert Read", 
+        "Hines Ward", "Ivan Misner", "James Slezak", "Kara Swisher", "Jason Wise", 
+        "Jeremy Lopez", "Chelsea Krost", "Jim Boeheim", "Jonathan Abrams", 
+        "Kevin Plank", "Klaus Schwab", "Natalie Elizabeth Diver", "Leonardo DiCaprio", 
+        "Lionel Sanders", "Lolly Daskal", "Louis Menand", "Mario Batali", 
+        "Trish Bertuzzi", "Paul McCartney", "Peter Navarro", "Ray Dalio", 
+        "Pierrette Abeel", "Robert Iger", "Scott Eyman", "Sean Astin", "Sergey Brin", 
+        "Susan Mazza", "Shaun McNiff", "Simon Sebag-Montefiore", "Alice Kemper", 
+        "Simon Winchester", "Sonny Vaccaro", "Stefan Hell", "Stefan Helmreich", 
+        "Anu Hariharan", "Steve Huffman", "Laura Klein", "Steven Chu", 
+        "Steven Levitt", "Tilar Mazzeo", "Todd Duncan", "Tony Fletcher", 
+        "Jessica Hische", "Trevor Hastie", "Tucker Carlson", "Veerle Pieters", 
+        "Vincent Vanhoucke", "Volodymyr Mnih", "Warren Zanes", "William Phillips", 
+        "Jessica Livingston", "Marc Andreessen", "Michael Dell", "Ellen Lupton", 
+        "Dan Martell", "Tom Bilyeu", "Jennifer Aldrich", "Hrithik Roshan", 
+        "Benedict Evans", "Biz Stone", "Mike Butcher", "Diana Kimball", 
+        "Dharmesh Shah", "Eric Ries", "Brian Armstrong", "Ann Handley", 
+        "Ryan Foland", "Stephen Colbert", "Cynthia Johnson", "Jon Gabriel", 
+        "Al Gore", "Joel Gascoigne", "John Carmack", "Coleen Baik", "Pete Flint", 
+        "Val Head", "Paul Graham", "Jeff Weiner", "Joshua M. Brown", 
+        "Stephen Howson", "Ian Livingston", "Aleyda Solis", "Donald J. Trump", 
+        "Jon Cooper", "Jane Pyle", "Steve Kerr", "Jack Canfield", "Oluyomi Ojo", 
+        "Mehmet Oz", "Zoe M. Gillenwater", "Donald Trump Jr.", "Patrick Collison", 
+        "Abby Denson", "Mark Suster", "Chris Sacca", "Amber Brogly", "Kim Dotcom", 
+        "Dick Costolo", "Elad Gil", "Alexis Ohanian Sr.", "Judith Lewis Herman", 
+        "Scott Galloway", "David Cancel", "Chris Dixon", "David Kadavy", 
+        "Kate Betts", "Nassim Nicholas Taleb", "Adam Singolda", "Peggy Noonan", 
+        "Jeff Bussgang", "Shai Wininger", "Eytan Levit", "Yaniv Feldman", 
+        "Tess Masters", "Josh Bersin", "Victoria James", "Tommy Bar Av", 
+        "Chris Duffey", "Shep Hyken", "Jason McCabe Calacanis", "Troy Osinoff", 
+        "Genevieve Nnaji", "John Ashcroft", "Douglas Burdett", "Dia Mirza", 
+        "Joshua Lisec", "Garry Tan", "Brant Cooper", "Yannik Schrade", 
+        "Adryenn Ashley", "Satya Patel", "Aaron Agius", "Rebecca Maud Newton", 
+        "Alexey Moiseenkov", "Jay Baer", "Greta Van Susteren", "Skip Prichard", 
+        "Keith Rabois", "Michael Sliwinski", "Phil Santoro", "Nigella Lawson", 
+        "Stephen Jeske", "John C. Maxwell", "Albert Wenger", "Jamie Dimon", 
+        "Shannon Bream", "Sean Si", "Richard H Thaler", "Julie Plec", 
+        "Ray Kurzweil", "Tanveer Naseer", "Lee Odden", "Ryan Graves", 
+        "Maria Shriver", "Bret Victor", "Julie D. Andrews", "Paul Boag", 
+        "Dan Olsen", "Hillel Fuld", "Derek Sivers", "Jeff Bullas", 
+        "Chelsea Handler", "Gabriel Weinberg", "Isaac Mashman", "Sheri Salata", 
+        "Fabio Sasso", "Balaji S. Srinivasan", "Jason Santa Maria", 
+        "Tom Hopkins", "Liz Wheeler", "Peep Laja", "Anthony Robbins", 
+        "Soledad O'Brien", "Mark Hunter", "Whitney Tilson", "Sarah Weinman", 
+        "Evan Carmichael", "Jeremy Miller", "Steve Yegge", "Justin Kan", 
+        "Maria Menounos", "Sam Harris", "Todd Adkins", "Bill Ackman", 
+        "Dan Sullivan", "Irene Kiwia", "Sunit Singh", "Linus Torvalds", 
+        "Christina Lattimer", "Azeem Azhar", "Brad Gooch", "Brandon Steiner", 
+        "Dan Miller", "Loren Ridinger", "Davide Marcato", "Jemele Juanita Hill", 
+        "George Marcus", "George Will", "Hal Elrod", "James Cameron", 
+        "Jeff Kinney", "Joyce Knudsen", "Larry Kendall", "Scott Allen", 
+        "Tomi Lahren", "Stephen Shore", "Andy Budd", "Dan Rockwell", 
+        "Amir Salihefendic", "Savannah Guthrie", "David Rothschild", 
+        "Søren Bjerg", "Claire Diaz Ortiz", "Santiago Segura", "Daniel Munro", 
+        "Ginger Renee Colonomos", "Carl Quintanilla", "Bobby Voicu", 
+        "Joseph Mercola", "Howard Getson", "Dave Isbitski", "Jay Rosen", 
+        "Jack Dee", "Jonathan Kay", "Sam Sanders", "Jesse Torres", 
+        "Steven Eisenberg", "Mark Schaefer", "Brian Cox", "W. Patrick McCray", 
+        "John Green", "Jack Schofield", "Bertalan Meskó", "Tim Fargo", 
+        "Andreas Sandre", "Sanjay Gupta", "Jeremy Gardner", "Eric Alper", 
+        "James Clear", "Seamus O'Regan", "Jeremy Darlow", "Tyler Winklevoss", 
+        "Anthony Scaramucci", "Shay-Akil McLean", "Vala Afshar", "Javier Muñoz", 
+        "Whitson Gordon", "Mark Keith Muhumuza", "Jim Harbaugh", 
+        "Derrick Deshaun Watson", "Nathan Allen Pirtle", "Charlie Mullins", 
+        "John Gruber", "Byron L. Ernest", "Carlton Douglas Ridenhour", 
+        "Geoffrey Miller", "Grant Wahl", "Darren Stanton", "Adam Schein", 
+        "Jay Scot Bilas", "Stephen Curry", "Vir Sanghvi", "Jay Ruderman", 
+        "Mark Hertling", "Luis Alberto Moreno", "Charles Arthur", 
+        "Daniel Burka", "John McDonnell", "Jamie Grayson", "Russell Poldrack", 
+        "Dan Waldschmidt", "Judd Apatow"
+      ];
+      
 
       if (!recommenders || recommenders.length === 0) {
         console.log(chalk.yellow("No recommenders found on the main page."));
@@ -552,10 +688,10 @@ export async function main({
       // Check which recommenders are already in the database
       console.log(chalk.blue("\nChecking existing recommenders in database..."));
       const recommenderStatus = await Promise.all(
-        recommenders.map(async (recommender) => {
-          const existingId = await checkExistingPerson(recommender.name);
+        recommenders.map(async (recommender: string) => {
+          const existingId = await checkExistingPerson(recommender);
           return {
-            ...recommender,
+            name: recommender,
             exists: !!existingId,
             id: existingId
           };

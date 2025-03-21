@@ -24,11 +24,58 @@ initLogger({
   apiKey: process.env.BRAINTRUST_API_KEY,
 });
 
+// Convert text to title case following standard capitalization rules
+function toTitleCase(text: string): string {
+  const minorWords = new Set([
+    'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for',
+    'if', 'in', 'nor', 'of', 'on', 'or', 'so', 'the',
+    'to', 'yet'
+  ]);
+  const punctuationTriggers = new Set([':', '(', '[', '{', '"', '\'', '—', '–']); // dash types too
+
+  const words = text.toLowerCase().split(/\s+/); // split on spaces
+  let result = [];
+  let capitalizeNext = true; // first word should be capitalized
+
+  for (let i = 0; i < words.length; i++) {
+    let word = words[i];
+
+    // Check if previous word ends with punctuation that triggers capitalization
+    if (i > 0) {
+      const lastCharPrevWord = words[i - 1].slice(-1);
+      if (punctuationTriggers.has(lastCharPrevWord)) {
+        capitalizeNext = true;
+      }
+    }
+
+    // Remove leading punctuation from word for checking
+    const leadingPunctMatch = word.match(/^([(\[{"']*)(.*)$/);
+    const leadingPunct = leadingPunctMatch?.[1] || '';
+    word = leadingPunctMatch?.[2] || word;
+
+    // Capitalize as needed
+    if (capitalizeNext || !minorWords.has(word)) {
+      word = word.charAt(0).toUpperCase() + word.slice(1);
+    }
+
+    // Re-add leading punctuation
+    word = leadingPunct + word;
+    result.push(word);
+
+    // Determine if next word should be capitalized
+    const lastChar = word.slice(-1);
+    capitalizeNext = punctuationTriggers.has(lastChar);
+  }
+
+  return result.join(' ');
+}
+
 async function sanitizeTitle(title: string) {
+  const titleCased = toTitleCase(title);
   const result = await invoke({
     projectName: "booklist",
     slug: "sanitize-title-fc91",
-    input: { title },
+    input: { title: titleCased },
     schema: z.object({
       title: z.string()
     }),
