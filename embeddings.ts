@@ -22,14 +22,32 @@ if (!openaiKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 const openai = new OpenAI({ apiKey: openaiKey });
 
-async function createEmbedding(title: string, author: string) {
-  const text = `${title} by ${author}`;
+interface BookEmbeddings {
+  title_embedding: number[];
+  author_embedding: number[];
+  description_embedding: number[];
+}
+
+async function createFieldEmbedding(text: string) {
   const response = await openai.embeddings.create({
     model: "text-embedding-ada-002",
     input: text,
   });
-  
   return response.data[0].embedding;
+}
+
+async function createBookEmbeddings(title: string, author: string, description: string): Promise<BookEmbeddings> {
+  const [title_embedding, author_embedding, description_embedding] = await Promise.all([
+    createFieldEmbedding(title),
+    createFieldEmbedding(author),
+    createFieldEmbedding(description)
+  ]);
+
+  return {
+    title_embedding,
+    author_embedding,
+    description_embedding
+  };
 }
 
 async function run() {
@@ -38,7 +56,7 @@ async function run() {
     const { data: books, error: queryError } = await supabase
       .from('books')
       .select()
-      .is('embedding', null)
+      .is('title_embedding', null)
       .order('created_at', { ascending: true });
 
     if (queryError) {
@@ -51,16 +69,16 @@ async function run() {
     // Process each book
     for (const book of books || []) {
       try {
-        const { title, author } = book;
+        const { title, author, description } = book;
         
-        if (title && author) {
-          console.log(`Creating embedding for: "${title}" by ${author}`);
+        if (title && author && description) {
+          console.log(`Creating embeddings for: "${title}" by ${author}`);
 
-          // Create embedding
-          const embedding = await createEmbedding(title, author);
+          // Create embeddings
+          const embeddings = await createBookEmbeddings(title, author, description);
           const { error: updateError } = await supabase
             .from('books')
-            .update({ embedding })
+            .update(embeddings)
             .eq('id', book.id);
           
           if (updateError) {

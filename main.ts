@@ -462,10 +462,10 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
   const amazonUrl = await findAmazonUrl(page, sanitizedTitle.title, cleanedAuthor);
   console.log(amazonUrl ? chalk.green('Found Amazon URL') : chalk.yellow('No Amazon URL found'));
 
-  // Create embedding for the new book
-  console.log(chalk.blue('Creating embedding...'));
-  const embedding = await createEmbedding(sanitizedTitle.title, cleanedAuthor);
-  console.log(chalk.green('Embedding created'));
+  // Create embeddings for the new book
+  console.log(chalk.blue('Creating embeddings...'));
+  const embeddings = await createEmbedding(sanitizedTitle.title, cleanedAuthor, description);
+  console.log(chalk.green('Embeddings created'));
 
   const bookId = uuidv4();
   const { data: newBook, error: createError } = await supabase
@@ -477,7 +477,7 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
       genre,
       description,
       amazon_url: amazonUrl,
-      embedding
+      ...embeddings
     })
     .select()
     .single();
@@ -489,14 +489,17 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
   return newBook.id;
 }
 
-async function createEmbedding(title: string, author: string) {
-  const text = `${title} by ${author}`;
+async function createEmbedding(title: string, author: string, description: string) {
   const response = await openai.embeddings.create({
     model: "text-embedding-ada-002",
-    input: text,
+    input: [title, author, description],
   });
   
-  return response.data[0].embedding;
+  return {
+    title_embedding: response.data[0].embedding,
+    author_embedding: response.data[1].embedding,
+    description_embedding: response.data[2].embedding,
+  };
 }
 
 async function createRecommendation(bookId: string, personId: string, source: string, sourceLink: string) {
