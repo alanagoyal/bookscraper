@@ -89,10 +89,6 @@ function cleanAuthorName(author: string): string {
     .trim();
 }
 
-function getBasicTitle(title: string): string {
-  return title.split(':')[0].trim();
-}
-
 function standardizeTwitterUrl(url: string): string {
   if (!url) return '';
   
@@ -430,13 +426,24 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
     return exactMatch.id;
   }
 
-  // If no exact match, check for similar books using pg_trgm
+  // If no exact match, check for similar books using embeddings
   console.log(chalk.blue("Checking for similar books:"), chalk.gray(`"${book.title}" by ${book.author}`));
   
+  const response = await createEmbedding(
+    sanitizedTitle.title,
+    cleanedAuthor,
+    ''
+  );
+
+  if (!response) {
+    console.error(chalk.red("Embedding creation failed"));
+    throw new Error('Error creating embeddings');
+  }
+
   const { data: similarBooks, error: similarBooksError } = await supabase
-    .rpc('find_similar_books', {
-      p_title: getBasicTitle(book.title.trim()),
-      p_author: cleanAuthorName(book.author)
+    .rpc('get_best_matching_book', {
+      p_title_embedding: response.title_embedding,
+      p_author_embedding: response.author_embedding
     });
 
   if (similarBooksError) {
@@ -490,15 +497,26 @@ async function findOrCreateBook(page: Page, book: { title: string, author: strin
 }
 
 async function createEmbedding(title: string, author: string, description: string) {
-  const response = await openai.embeddings.create({
-    model: "text-embedding-ada-002",
-    input: [title, author, description],
-  });
+  // Create separate embedding requests for each field
+  const [titleResponse, authorResponse, descriptionResponse] = await Promise.all([
+    openai.embeddings.create({
+      model: "text-embedding-ada-002",
+      input: title,
+    }),
+    openai.embeddings.create({
+      model: "text-embedding-ada-002",
+      input: author,
+    }),
+    openai.embeddings.create({
+      model: "text-embedding-ada-002",
+      input: description,
+    })
+  ]);
   
   return {
-    title_embedding: response.data[0].embedding,
-    author_embedding: response.data[1].embedding,
-    description_embedding: response.data[2].embedding,
+    title_embedding: titleResponse.data[0].embedding,
+    author_embedding: authorResponse.data[0].embedding,
+    description_embedding: descriptionResponse.data[0].embedding,
   };
 }
 
@@ -815,7 +833,9 @@ async function processRecommender(page: Page, recommenderName: string, currentUr
     try {
       console.log(chalk.blue("\nProcessing:"), chalk.white(book.title));
       
-      const bookId = await findOrCreateBook(page, book);
+      const sanitizedTitle = await sanitizeTitle(book.title.trim());
+      const cleanedAuthor = cleanAuthorName(book.author);
+      const bookId = await findOrCreateBook(page, { title: sanitizedTitle.title, author: cleanedAuthor });
       await createRecommendation(bookId, personId, sourceName, currentUrl);
       
       console.log(chalk.green(`✓ Successfully processed "${book.title}"`));
