@@ -5,6 +5,7 @@ import { z } from 'zod';
 import dotenv from 'dotenv';
 import chalk from 'chalk';
 import readline from 'readline';
+import { standardizeTwitterUrl } from './twitter-url.ts';
 
 dotenv.config();
 
@@ -50,10 +51,15 @@ async function updatePersonSocialUrl(id: string, socialUrl: string) {
 
   console.log(chalk.blue('Found person:'), person);
 
+  // Standardize Twitter URLs before updating
+  const finalUrl = socialUrl.toLowerCase().includes('twitter.com') || socialUrl.toLowerCase().includes('x.com')
+    ? standardizeTwitterUrl(socialUrl)
+    : socialUrl;
+
   // Now update the record
   const { error: updateError } = await supabase
     .from('people')
-    .update({ url: socialUrl })
+    .update({ url: finalUrl })
     .eq('id', id);
 
   if (updateError) {

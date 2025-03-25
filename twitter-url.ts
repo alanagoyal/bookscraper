@@ -15,8 +15,8 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-function standardizeTwitterUrl(url: string): string {
-  if (!url) return '';
+export function standardizeTwitterUrl(url: string | null): string | null {
+  if (!url) return null;
   
   // Only process Twitter/X URLs
   if (!url.toLowerCase().includes('twitter.com') && !url.toLowerCase().includes('x.com')) {
