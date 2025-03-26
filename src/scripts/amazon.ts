@@ -1,23 +1,8 @@
-import { Stagehand } from "@browserbasehq/stagehand";
-import StagehandConfig from "./stagehand.config.js";
-import { createClient } from '@supabase/supabase-js';
-import { z } from 'zod';
-import dotenv from 'dotenv';
 import chalk from 'chalk';
-
-dotenv.config();
-
-// To run: npx tsx amazon-links.ts
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in environment variables');
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+import StagehandConfig from "../../stagehand.config.js";
+import { Stagehand } from "@browserbasehq/stagehand";
+import { supabase } from '../services/supabase.ts';
+import { findAmazonUrl } from '../utils/amazon.ts';
 
 async function getBooks() {
   const { data: books, error } = await supabase
@@ -74,26 +59,7 @@ async function updateBookAmazonUrl(id: string, amazonUrl: string) {
   }
 }
 
-async function findAmazonUrl(page: any, title: string, author: string) {
-  await page.goto('https://www.google.com');
-  
-  // Search for book on Google
-  const searchQuery = `${title} ${author} amazon`;
-  await page.act("Type '" + searchQuery + "' into the search input");
-  await page.act("Press Enter");
-
-  // Extract the first Amazon link
-  const { links } = await page.extract({
-    instruction: "Extract the first link that contains 'amazon.com'",
-    schema: z.object({
-      links: z.array(z.string())
-    }),
-    useTextExtract: false
-  });
-
-  return links[0] || null;
-}
-
+// To run: npx tsx amazon.ts
 async function run() {
   const stagehand = new Stagehand({
     ...StagehandConfig,

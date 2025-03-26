@@ -1,39 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
-import { initLogger, invoke } from 'braintrust';
-import dotenv from 'dotenv';
-import { type } from 'os';
-import { z } from 'zod';
+import { supabase } from '../services/supabase.js';
+import { categorizePerson } from '../utils/person.ts';
 
-dotenv.config();
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in environment variables');
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Initialize Braintrust logger
-initLogger({
-  projectName: "booklist",
-  apiKey: process.env.BRAINTRUST_API_KEY,
-});
-
-async function categorizePerson(person: string) {
-  const result = await invoke({
-    projectName: "booklist",
-    slug: "categorize-person-7bb3",
-    input: { person },
-    schema: z.object({
-      type: z.string()
-    }),
-  });
-  return result;
-}
-
+// To run: npx tsx person.ts
 async function run() {
   try {
     // Get all uncategorized people
