@@ -1,6 +1,6 @@
 import StagehandConfig from "../../stagehand.config.js";
 import { Stagehand } from "@browserbasehq/stagehand";
-import { supabase } from '../services/supabase.js';
+import { supabase } from '../services/supabase.ts';
 import { findSocialUrl } from '../utils/social.ts';
 import chalk from 'chalk';
 
@@ -8,8 +8,9 @@ import chalk from 'chalk';
 async function getPeople() {
   const { data: people, error } = await supabase
     .from('people')
-    .select('id, full_name, url')
-    .is('url', null);
+    .select('id, full_name, type, url')
+    .is('url', null)
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
   return people;
@@ -61,7 +62,7 @@ async function run() {
     for (const person of people) {
       console.log(chalk.green(`\nProcessing: ${person.full_name}`));
       
-      const socialUrl = await findSocialUrl(page, person.full_name);
+      const socialUrl = await findSocialUrl(page, person.full_name, person.type);
       
       if (socialUrl) {
         await updatePersonSocialUrl(person.id, socialUrl);

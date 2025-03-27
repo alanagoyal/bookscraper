@@ -1,4 +1,4 @@
-import { supabase } from '../services/supabase.js';
+import { supabase } from '../services/supabase.ts';
 import { categorizePerson } from '../utils/person.ts';
 
 // To run: npx tsx person.ts

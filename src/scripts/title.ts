@@ -1,5 +1,5 @@
-import { supabase } from '../services/supabase.js';
-import { sanitizeTitle } from '../utils/title';
+import { supabase } from '../services/supabase.ts';
+import { sanitizeTitle } from '../utils/title.ts';
 
 // To run: npx tsx title.ts
 async function run() {
