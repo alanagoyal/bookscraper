@@ -5,29 +5,28 @@ import { z } from "zod";
 // Helper function to find social URL using stagehand
 export async function findSocialUrl(
   page: any,
-  personName: string
+  personName: string,
+  type: string,
 ): Promise<string | null> {
-  // First try Twitter
   await page.goto("https://www.google.com");
-  const twitterQuery = `${personName} twitter profile`;
+  const searchQuery = `${personName} ${type}`;
 
-  await page.act(`Type '${twitterQuery}' into the search input`);
+  await page.act(`Type '${searchQuery}' into the search input`);
   await page.act("Press Enter");
 
   // Set timeout for 2 seconds
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
-  const { links: twitterLinks } = await page.extract({
-    instruction:
-      "Extract the first link that contains 'twitter' or 'x'. Make sure it is a valid URL.",
+  const { links } = await page.extract({
+    instruction: "Extract the first link from the search results. Make sure it is a valid URL.",
     schema: z.object({
       links: z.array(z.string()),
     }),
     useTextExtract: false,
   });
 
-  if (twitterLinks[0]) {
-    console.log(chalk.cyan(`\nFound Twitter profile: ${twitterLinks[0]}`));
+  if (links && links.length > 0) {
+    console.log(chalk.cyan(`\nFound link: ${links[0]}`));
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -35,7 +34,7 @@ export async function findSocialUrl(
 
     const confirm = await new Promise<boolean>((resolve) => {
       rl.question(
-        chalk.yellow(`Is this the correct Twitter profile? (y/n): `),
+        chalk.yellow(`Is this the correct link? (y/n): `),
         (answer) => {
           rl.close();
           resolve(answer.toLowerCase() === "y");
@@ -43,46 +42,7 @@ export async function findSocialUrl(
       );
     });
 
-    if (confirm) return sanitizeTwitterUrl(twitterLinks[0]);
-  }
-
-  // Try Wikipedia if Twitter wasn't found or was rejected
-  await page.goto("https://www.google.com");
-  const wikiQuery = `${personName} wikipedia`;
-
-  await page.act(`Type '${wikiQuery}' into the search input`);
-  await page.act("Press Enter");
-
-  // Set timeout for 2 seconds
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-
-  const { links: wikiLinks } = await page.extract({
-    instruction:
-      "Extract the first link that contains 'wikipedia'. Make sure it is a valid URL.",
-    schema: z.object({
-      links: z.array(z.string()),
-    }),
-    useTextExtract: false,
-  });
-
-  if (wikiLinks[0]) {
-    console.log(chalk.cyan(`\nFound Wikipedia page: ${wikiLinks[0]}`));
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    const confirm = await new Promise<boolean>((resolve) => {
-      rl.question(
-        chalk.yellow(`Is this the correct Wikipedia page? (y/n): `),
-        (answer) => {
-          rl.close();
-          resolve(answer.toLowerCase() === "y");
-        }
-      );
-    });
-
-    if (confirm) return wikiLinks[0];
+    if (confirm) return links[0];
   }
 
   return null;
