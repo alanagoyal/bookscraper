@@ -169,7 +169,7 @@ async function navigateToRecommenderProfile(
 }
 
 // Find or create a person in the database
-async function findOrCreatePerson(personName: string, url: string | null) {
+async function findOrCreatePerson(personName: string) {
   const existingPersonId = await checkExistingPerson(personName);
 
   if (existingPersonId) {
@@ -184,7 +184,6 @@ async function findOrCreatePerson(personName: string, url: string | null) {
   const { error: personInsertError } = await supabase.from("people").insert({
     id: newPersonId,
     full_name: personName,
-    url,
     type,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -197,9 +196,7 @@ async function findOrCreatePerson(personName: string, url: string | null) {
   }
 
   console.log(
-    chalk.green(
-      `Created new entry for ${personName}${url ? ` with URL ${url}` : ""}`
-    )
+    chalk.green(`Created new entry for ${personName}`)
   );
   return newPersonId;
 }
@@ -508,33 +505,18 @@ export async function main({
             chalk.white(recommender.name)
           );
 
-          // Ask user if they want to process this recommender
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-
-          const promptMessage = recommender.exists
-            ? chalk.yellow(
-                `\n${recommender.name} is already in database. Do you want to update their information and add new recommendations? (y/n): `
-              )
-            : chalk.yellow(
-                `\nDo you want to process ${recommender.name}? (y/n): `
-              );
-
-          const shouldProcess = await new Promise<boolean>((resolve) => {
-            rl.question(promptMessage, (answer) => {
-              rl.close();
-              resolve(answer.toLowerCase() === "y");
-            });
-          });
-
-          if (!shouldProcess) {
+          // Skip existing recommenders
+          if (recommender.exists) {
             console.log(
-              chalk.yellow(`Skipping ${recommender.name} by user request`)
+              chalk.yellow(`Skipping ${recommender.name} (already in database)`)
             );
             continue;
           }
+
+          // Automatically process new recommenders
+          console.log(
+            chalk.green(`Processing ${recommender.name} (new recommender)`)
+          );
 
           // Navigate to recommender's profile by clicking their name
           console.log(chalk.blue("Navigating to recommender's profile..."));
@@ -583,26 +565,6 @@ async function processRecommender(
   const sourceName = getSourceName(currentUrl);
   console.log(chalk.blue("Source:"), sourceName);
 
-  // Check if recommender exists in database
-  const { data: existingPerson } = await supabase
-    .from("people")
-    .select("id, url")
-    .eq("full_name", recommenderName)
-    .single();
-
-  let socialUrl = null;
-  if (!existingPerson) {
-    // Only find social URL for new recommenders
-    console.log(chalk.blue("Finding social URL..."));
-    socialUrl = await findSocialUrl(page, recommenderName);
-
-    // Go back to recommender's profile
-    await page.goto(currentUrl);
-
-    // Set 2 seconds delay
-    await page.waitForTimeout(2000);
-  }
-
   // Extract book recommendations
   console.log(chalk.blue("Extracting book recommendations..."));
   const books = await extractBookRecommendations(page, recommenderName);
@@ -618,9 +580,7 @@ async function processRecommender(
 
   // Create/find person record
   console.log(chalk.blue("Processing recommender information..."));
-  const personId = existingPerson
-    ? existingPerson.id
-    : await findOrCreatePerson(recommenderName, socialUrl);
+  const personId = await findOrCreatePerson(recommenderName);
 
   // Process books and create recommendations
   console.log(chalk.green("\nProcessing books..."));
