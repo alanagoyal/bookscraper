@@ -12,12 +12,9 @@ import { z } from "zod";
 import chalk from "chalk";
 import { v4 as uuidv4 } from "uuid";
 import inquirer from "inquirer";
-import readline from "readline";
 import { supabase } from "./src/services/supabase.ts";
-import { openai } from "./src/services/openai.ts";
 import { sanitizeTitle } from "./src/utils/title.ts";
 import { categorizePerson } from "./src/utils/person.ts";
-import { findSocialUrl } from "./src/utils/social.ts";
 import { findAmazonUrl } from "./src/utils/amazon.ts";
 import { generateGenreAndDescription } from "./src/utils/genre-and-description.ts";
 import { createBookEmbeddings } from "./src/utils/embeddings.ts";
@@ -68,8 +65,9 @@ async function promptUser() {
       name: "type",
       message: "What type of URL do you have?",
       choices: [
-        { name: "URL with a collection of recommenders", value: "collection" },
-        { name: "URL for a specific recommender", value: "specific" },
+        { name: "Recommender list", value: "collection" },
+        { name: "One recommender", value: "specific" },
+        { name: "Multiple recommenders", value: "multiple" },
       ],
     },
   ]);
@@ -81,6 +79,8 @@ async function promptUser() {
       message:
         urlType.type === "collection"
           ? "Enter the URL of the main book recommenders page:"
+          : urlType.type === "multiple"
+          ? "Enter the URL of the page with multiple recommenders:"
           : "Enter the URL of the specific recommender page:",
       validate: (input) => {
         if (!input.trim()) {
@@ -122,31 +122,66 @@ async function promptUser() {
 }
 
 // Extract book recommendations from the page
-async function extractBookRecommendations(page: Page, personName: string) {
-  const { books } = await page.extract({
-    instruction: `Look for a list or collection of book recommendations on the page. For each book found:
+async function extractBookRecommendations(page: Page, personName?: string) {
+  const instruction = personName
+    ? `Look for a list or collection of book recommendations on the page. For each book found:
       1. The title should be a proper book title
       2. The author should be the actual writer of the book (not ${personName})
       3. Skip items without both title and author
-      4. Skip items where the author name matches ${personName}`,
-    schema: z.object({
-      books: z.array(
-        z.object({
-          title: z.string(),
-          author: z.string(),
-        })
-      ),
-    }),
-    useTextExtract: true, // Use HTML parsing instead of text extraction
-  });
-  return books;
+      4. Skip items where the author name matches ${personName}`
+    : `Get all book recommendations on the page including the person who recommended them, title, and author. For each recommendation:
+      1. The recommender should be the person who recommended the book
+      2. The title should be a proper book title
+      3. The author should be the actual writer of the book
+      4. Skip items without recommender, title, and author`;
+
+  type SingleRecommenderResult = {
+    books: Array<{ title: string; author: string }>;
+  };
+
+  type MultipleRecommenderResult = {
+    recommendations: Array<{
+      recommender: string;
+      title: string;
+      author: string;
+    }>;
+  };
+
+  const schema = personName
+    ? z.object({
+        books: z.array(
+          z.object({
+            title: z.string(),
+            author: z.string(),
+          })
+        ),
+      })
+    : z.object({
+        recommendations: z.array(
+          z.object({
+            recommender: z.string(),
+            title: z.string(),
+            author: z.string(),
+          })
+        ),
+      });
+
+  const result = await page.extract({
+    instruction,
+    schema,
+    useTextExtract: true,
+  }) as SingleRecommenderResult | MultipleRecommenderResult;
+
+  return personName
+    ? (result as SingleRecommenderResult).books
+    : (result as MultipleRecommenderResult).recommendations;
 }
 
 // Extract list of recommenders from the page
 async function extractRecommendersList(page: Page) {
   const { recommenders } = await page.extract({
     instruction:
-      "Extract ALL of the names on the website. Get their names only.",
+      "Extract the first 1000 names on the website. Get their names only.",
     schema: z.object({
       recommenders: z.array(
         z.object({
@@ -195,9 +230,7 @@ async function findOrCreatePerson(personName: string) {
     );
   }
 
-  console.log(
-    chalk.green(`Created new entry for ${personName}`)
-  );
+  console.log(chalk.green(`Created new entry for ${personName}`));
   return newPersonId;
 }
 
@@ -394,74 +427,7 @@ export async function main({
       // Original flow for collection of recommenders
       console.log(chalk.blue("Extracting recommenders list..."));
 
-      // const recommenders = await extractRecommendations(page);
-
-      const recommenders = [
-        "Linus Torvalds",
-        "Christina Lattimer",
-        "Brad Gooch",
-        "Brandon Steiner",
-        "Dan Miller",
-        "Davide Marcato",
-        "Jemele Juanita Hill",
-        "George Marcus",
-        "George Will",
-        "Hal Elrod",
-        "James Cameron",
-        "Jeff Kinney",
-        "Larry Kendall",
-        "Scott Allen",
-        "Tomi Lahren",
-        "Stephen Shore",
-        "Andy Budd",
-        "Dan Rockwell",
-        "Amir Salihefendic",
-        "Savannah Guthrie",
-        "David Rothschild",
-        "Søren Bjerg",
-        "Santiago Segura",
-        "Daniel Munro",
-        "Ginger Renee Colonomos",
-        "Carl Quintanilla",
-        "Bobby Voicu",
-        "Joseph Mercola",
-        "Dave Isbitski",
-        "Jay Rosen",
-        "Jack Dee",
-        "Steven Eisenberg",
-        "Brian Cox",
-        "W. Patrick McCray",
-        "John Green",
-        "Jack Schofield",
-        "Bertalan Meskó",
-        "Tim Fargo",
-        "Andreas Sandre",
-        "Sanjay Gupta",
-        "Eric Alper",
-        "James Clear",
-        "Seamus O'Regan",
-        "Jeremy Darlow",
-        "Tyler Winklevoss",
-        "Anthony Scaramucci",
-        "Shay-Akil McLean",
-        "Vala Afshar",
-        "Javier Muñoz",
-        "Whitson Gordon",
-        "Jim Harbaugh",
-        "Derrick Deshaun Watson",
-        "John Gruber",
-        "Carlton Douglas Ridenhour",
-        "Geoffrey Miller",
-        "Grant Wahl",
-        "Darren Stanton",
-        "Adam Schein",
-        "Jay Scot Bilas",
-        "Stephen Curry",
-        "Luis Alberto Moreno",
-        "Russell Poldrack",
-        "Dan Waldschmidt",
-        "Judd Apatow",
-      ];
+      const recommenders = await extractRecommendersList(page);
 
       if (!recommenders || recommenders.length === 0) {
         console.log(chalk.yellow("No recommenders found on the main page."));
@@ -475,10 +441,10 @@ export async function main({
         chalk.blue("\nChecking existing recommenders in database...")
       );
       const recommenderStatus = await Promise.all(
-        recommenders.map(async (recommender: string) => {
-          const existingId = await checkExistingPerson(recommender);
+        recommenders.map(async (recommender) => {
+          const existingId = await checkExistingPerson(recommender.name);
           return {
-            name: recommender,
+            name: recommender.name,
             exists: !!existingId,
             id: existingId,
           };
@@ -536,6 +502,72 @@ export async function main({
           continue;
         }
       }
+    } else if (urlType === "multiple") {
+      // New flow for multiple recommenders
+      console.log(chalk.blue("Extracting book recommendations..."));
+      type MultipleRecommendation = {
+        recommender: string;
+        title: string;
+        author: string;
+      };
+      const recommendations = (await extractBookRecommendations(page)) as MultipleRecommendation[];
+
+      if (!recommendations || recommendations.length === 0) {
+        console.log(
+          chalk.yellow("No book recommendations found for this page.")
+        );
+        return;
+      }
+
+      console.log(chalk.green(`Found ${recommendations.length} recommendations`));
+
+      // Process recommendations
+      console.log(chalk.green("\nProcessing recommendations..."));
+      for (const recommendation of recommendations) {
+        try {
+          console.log(
+            chalk.blue("\nProcessing recommendation by:"),
+            chalk.white(recommendation.recommender)
+          );
+
+          const recommenderName = recommendation.recommender;
+          const book = {
+            title: recommendation.title,
+            author: recommendation.author,
+          };
+
+          // Create/find person record
+          console.log(chalk.blue("Processing recommender information..."));
+          const personId = await findOrCreatePerson(recommenderName);
+
+          // Create/find book record
+          const bookId = await findOrCreateBook(page, book);
+
+          // Create recommendation
+          await createRecommendation(
+            bookId,
+            personId,
+            getSourceName(url),
+            url
+          );
+
+          console.log(
+            chalk.green(`✓ Successfully processed recommendation by ${recommenderName}`)
+          );
+        } catch (error) {
+          console.error(
+            chalk.red(`Error processing recommendation by ${recommendation.recommender}:`),
+            error
+          );
+          continue;
+        }
+      }
+
+      console.log(
+        chalk.green(
+          `\nTotal recommendations processed for this page: ${recommendations.length}`
+        )
+      );
     } else {
       // Flow for specific recommender
       try {
