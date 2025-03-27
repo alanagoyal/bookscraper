@@ -1,5 +1,4 @@
 import chalk from "chalk";
-import readline from 'readline';
 import { z } from "zod";
 
 // Helper function to find social URL using stagehand
@@ -9,7 +8,7 @@ export async function findSocialUrl(
   type: string,
 ): Promise<string | null> {
   await page.goto("https://www.google.com");
-  const searchQuery = `${personName} ${type}`;
+  const searchQuery = `${personName} (${type})`;
 
   await page.act(`Type '${searchQuery}' into the search input`);
   await page.act("Press Enter");
@@ -27,22 +26,7 @@ export async function findSocialUrl(
 
   if (links && links.length > 0) {
     console.log(chalk.cyan(`\nFound link: ${links[0]}`));
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    const confirm = await new Promise<boolean>((resolve) => {
-      rl.question(
-        chalk.yellow(`Is this the correct link? (y/n): `),
-        (answer) => {
-          rl.close();
-          resolve(answer.toLowerCase() === "y");
-        }
-      );
-    });
-
-    if (confirm) return links[0];
+    return links[0];
   }
 
   return null;

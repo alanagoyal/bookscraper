@@ -18,6 +18,7 @@ import { categorizePerson } from "./src/utils/person.ts";
 import { findAmazonUrl } from "./src/utils/amazon.ts";
 import { generateGenreAndDescription } from "./src/utils/genre-and-description.ts";
 import { createBookEmbeddings } from "./src/utils/embeddings.ts";
+import { findSocialUrl } from "./src/utils/social.ts";
 
 // Helper Functions
 function stripUrl(url: string): string {
@@ -204,7 +205,7 @@ async function navigateToRecommenderProfile(
 }
 
 // Find or create a person in the database
-async function findOrCreatePerson(personName: string) {
+async function findOrCreatePerson(personName: string, page: Page) {
   const existingPersonId = await checkExistingPerson(personName);
 
   if (existingPersonId) {
@@ -215,11 +216,16 @@ async function findOrCreatePerson(personName: string) {
   const { type } = await categorizePerson(personName);
   console.log(chalk.blue(`Categorized ${personName} as: ${type}`));
 
+  // Find social URL before creating person
+  const socialUrl = await findSocialUrl(page, personName, type);
+  console.log(chalk.blue(`Found social URL for ${personName}: ${socialUrl || null}`));
+
   const newPersonId = uuidv4();
   const { error: personInsertError } = await supabase.from("people").insert({
     id: newPersonId,
     full_name: personName,
     type,
+    url: socialUrl,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
@@ -538,7 +544,7 @@ export async function main({
 
           // Create/find person record
           console.log(chalk.blue("Processing recommender information..."));
-          const personId = await findOrCreatePerson(recommenderName);
+          const personId = await findOrCreatePerson(recommenderName, page);
 
           // Create/find book record
           const bookId = await findOrCreateBook(page, book);
@@ -612,7 +618,7 @@ async function processRecommender(
 
   // Create/find person record
   console.log(chalk.blue("Processing recommender information..."));
-  const personId = await findOrCreatePerson(recommenderName);
+  const personId = await findOrCreatePerson(recommenderName, page);
 
   // Process books and create recommendations
   console.log(chalk.green("\nProcessing books..."));
