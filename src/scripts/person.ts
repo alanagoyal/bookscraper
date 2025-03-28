@@ -1,26 +1,25 @@
-import { supabase } from '../services/supabase.ts';
-import { categorizePerson } from '../utils/person.ts';
+import { supabase } from "../services/supabase.ts";
+import { categorizePerson } from "../utils/person.ts";
 
 const VALID_TYPES = [
-  'Anthropologists & Social Scientists',
-  'Architects & Design Experts',
-  'Art Historians, Critics & Visual Artists',
-  'Biographers & Memoirists',
-  'Biologists, Physicists & Medical Scientists',
-  'Broadcasters, Journalists & Media Commentators',
-  "Children's & Young Adult Authors",
-  'Comedians, Magicians & Entertainers',
-  'Cooks, Food Writers & Culinary Experts',
-  'Economists & Policy Experts',
-  'Entrepreneurs & Startup Founders',
-  'Venture Capitalists & Investors',
-  'Business Leaders & Executives',
-  'Product Managers, Designers & Engineers',
-  'Historians, Philosophers & Theologians',
-  'Novelists, Poets & Literary Scholars',
-  'Musicians, Music Critics & Filmmakers',
-  'Technologists, Mathematicians & Science Writers',
-  'Librarians, Teachers & Thought Leaders'
+  "Anthropologists & Social Scientists",
+  "Architects & Design Experts",
+  "Art Historians, Critics & Visual Artists",
+  "Authors & Writers",
+  "Biographers & Memoirists",
+  "Biologists, Physicists & Medical Scientists",
+  "Broadcasters, Journalists & Media Commentators",
+  "Comedians, Magicians & Entertainers",
+  "Cooks, Food Writers & Culinary Experts",
+  "Economists & Policy Experts",
+  "Entrepreneurs & Startup Founders",
+  "Venture Capitalists & Investors",
+  "Business Leaders & Executives",
+  "Product Managers, Designers & Engineers",
+  "Historians, Philosophers & Theologians",
+  "Musicians, Music Critics & Filmmakers",
+  "Technologists & Mathematicians",
+  "Librarians & Teachers",
 ];
 
 // To run: npx tsx person.ts
@@ -28,13 +27,17 @@ async function run() {
   try {
     // Get all people who either have no type or have a type not in our valid list
     const { data: people, error: queryError } = await supabase
-      .from('people')
-      .select('id, full_name, type')
-      .or(`type.is.null,type.not.in.(${VALID_TYPES.map(t => `"${t}"`).join(',')})`)
-      .order('full_name', { ascending: true });
+      .from("people")
+      .select("id, full_name, type")
+      .or(
+        `type.is.null,type.not.in.(${VALID_TYPES.map((t) => `"${t}"`).join(
+          ","
+        )})`
+      )
+      .order("full_name", { ascending: true });
 
     if (queryError) {
-      console.error('Error querying people:', queryError);
+      console.error("Error querying people:", queryError);
       return;
     }
 
@@ -50,12 +53,15 @@ async function run() {
 
           // Update the category
           const { error: updateError } = await supabase
-            .from('people')
+            .from("people")
             .update({ type })
-            .eq('id', person.id);
+            .eq("id", person.id);
 
           if (updateError) {
-            console.error(`Error updating person ${person.full_name}:`, updateError);
+            console.error(
+              `Error updating person ${person.full_name}:`,
+              updateError
+            );
           }
         }
       } catch (error) {
@@ -63,7 +69,7 @@ async function run() {
       }
     }
   } catch (error) {
-    console.error('Error in run function:', error);
+    console.error("Error in run function:", error);
   }
 }
 
