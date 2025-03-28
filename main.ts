@@ -178,21 +178,98 @@ async function extractBookRecommendations(page: Page, personName?: string) {
     : (result as MultipleRecommenderResult).recommendations;
 }
 
-// Extract list of recommenders from the page
+// Extract list of recommenders from the page for each category
 async function extractRecommendersList(page: Page) {
-  const { recommenders } = await page.extract({
-    instruction:
-      "Extract the first 1000 names on the website. Get their names only.",
-    schema: z.object({
-      recommenders: z.array(
-        z.object({
-          name: z.string(),
-        })
-      ),
-    }),
-    useTextExtract: false, // Use HTML parsing instead of text extraction
-  });
-  return recommenders;
+  const categories = [
+    "Classicists",
+    "Comedians & Humorists",
+    "Cooks & Food Writers",
+    "Development & Aid Workers (see also Economists)",
+    "Diplomats & Former Diplomats",
+    "Economists",
+    "Entrepreneurs & Business People",
+    "Environmentalists",
+    "Film Critics & Scholars",
+    "Film Directors",
+    "Five Books Editors",
+    "Foreign Correspondents",
+    "Fund Managers & Investors",
+    "Gardeners & Gardening Experts",
+    "Geologists",
+    "Historians",
+    "Historical Novelists",
+    "Intelligence Agents & Analysts",
+    "International Relations",
+    "Journalists",
+    "Lawyers",
+    "Librarians",
+    "Linguists",
+    "Literary Scholars",
+    "Magicians",
+    "Mathematicians",
+    "Medical Scientists",
+    "Memoirists",
+    "Military Historians & Veterans",
+    "Miscellaneous",
+    "Musicians, Music Critics & Scholars",
+    "Nonprofit Leaders & Activists",
+    "Novelists",
+    "Painters",
+    "Philosophers",
+    "Photographers",
+    "Physicists",
+    "Poets",
+    "Policemen",
+    "Policy Analysts",
+    "Political Commentators",
+    "Political Scientists",
+    "Politicians",
+    "Psychologists",
+    "Publishers",
+    "Science Writers",
+    "Scientists",
+    "Short Story Writers",
+    "Social Scientists",
+    "Sociologists",
+    "Sportspersons & Sportswriters",
+    "Teachers",
+    "Technologists",
+    "Theatre Critics",
+    "Theologians & Historians of Religion",
+    "Thriller and Crime Writers",
+    "Translators",
+    "Travel Writers",
+    "US Supreme Court Justices"
+  ];
+
+  const allRecommenders: Array<{ name: string; category: string }> = [];
+
+  for (const category of categories) {
+    console.log(chalk.blue(`Extracting recommenders for category: ${category}...`));
+    
+    // Extract recommenders under this category heading
+    const { recommenders } = await page.extract({
+      instruction: `Extract all expert names listed under the heading "${category}". Get their names only.`,
+      schema: z.object({
+        recommenders: z.array(
+          z.object({
+            name: z.string(),
+          })
+        ),
+      }),
+      useTextExtract: false, // Use HTML parsing instead of text extraction
+    });
+
+    // Add category information to each recommender
+    const recommendersWithCategory = recommenders.map(r => ({
+      ...r,
+      category
+    }));
+
+    allRecommenders.push(...recommendersWithCategory);
+  }
+
+  return allRecommenders;
 }
 
 // Navigate to the recommender's profile
@@ -431,82 +508,163 @@ export async function main({
 
     if (urlType === "collection") {
       // Original flow for collection of recommenders
-      console.log(chalk.blue("Extracting recommenders list..."));
+      console.log(chalk.blue("Processing recommenders by category..."));
 
-      const recommenders = await extractRecommendersList(page);
+      const categories = [
+        "Classicists",
+        "Comedians & Humorists",
+        "Cooks & Food Writers",
+        "Development & Aid Workers (see also Economists)",
+        "Diplomats & Former Diplomats",
+        "Economists",
+        "Entrepreneurs & Business People",
+        "Environmentalists",
+        "Film Critics & Scholars",
+        "Film Directors",
+        "Five Books Editors",
+        "Foreign Correspondents",
+        "Fund Managers & Investors",
+        "Gardeners & Gardening Experts",
+        "Geologists",
+        "Historians",
+        "Historical Novelists",
+        "Intelligence Agents & Analysts",
+        "International Relations",
+        "Journalists",
+        "Lawyers",
+        "Librarians",
+        "Linguists",
+        "Literary Scholars",
+        "Magicians",
+        "Mathematicians",
+        "Medical Scientists",
+        "Memoirists",
+        "Military Historians & Veterans",
+        "Miscellaneous",
+        "Musicians, Music Critics & Scholars",
+        "Nonprofit Leaders & Activists",
+        "Novelists",
+        "Painters",
+        "Philosophers",
+        "Photographers",
+        "Physicists",
+        "Poets",
+        "Policemen",
+        "Policy Analysts",
+        "Political Commentators",
+        "Political Scientists",
+        "Politicians",
+        "Psychologists",
+        "Publishers",
+        "Science Writers",
+        "Scientists",
+        "Short Story Writers",
+        "Social Scientists",
+        "Sociologists",
+        "Sportspersons & Sportswriters",
+        "Teachers",
+        "Technologists",
+        "Theatre Critics",
+        "Theologians & Historians of Religion",
+        "Thriller and Crime Writers",
+        "Translators",
+        "Travel Writers",
+        "US Supreme Court Justices"
+      ];
 
-      if (!recommenders || recommenders.length === 0) {
-        console.log(chalk.yellow("No recommenders found on the main page."));
-        return;
-      }
+      // Process each category
+      for (const category of categories) {
+        console.log(chalk.green(`\n=== Processing Category: ${category} ===`));
+        
+        // Extract recommenders for this category
+        const { recommenders } = await page.extract({
+          instruction: `Extract all expert names listed under the heading "${category}". Get their names only.`,
+          schema: z.object({
+            recommenders: z.array(
+              z.object({
+                name: z.string(),
+              })
+            ),
+          }),
+          useTextExtract: false, // Use HTML parsing instead of text extraction
+        });
 
-      console.log(chalk.green(`Found ${recommenders.length} recommenders`));
-
-      // Check which recommenders are already in the database
-      console.log(
-        chalk.blue("\nChecking existing recommenders in database...")
-      );
-      const recommenderStatus = await Promise.all(
-        recommenders.map(async (recommender) => {
-          const existingId = await checkExistingPerson(recommender.name);
-          return {
-            name: recommender.name,
-            exists: !!existingId,
-            id: existingId,
-          };
-        })
-      );
-
-      // Log the plan
-      console.log(chalk.blue("\nProcessing plan:"));
-      recommenderStatus.forEach((recommender) => {
-        if (recommender.exists) {
-          console.log(
-            chalk.yellow(`- ${recommender.name} (already in database)`)
-          );
-        } else {
-          console.log(chalk.green(`- ${recommender.name} (will process)`));
-        }
-      });
-
-      // Process each recommender
-      for (const recommender of recommenderStatus) {
-        try {
-          console.log(
-            chalk.blue("\nFound recommender:"),
-            chalk.white(recommender.name)
-          );
-
-          // Skip existing recommenders
-          if (recommender.exists) {
-            console.log(
-              chalk.yellow(`Skipping ${recommender.name} (already in database)`)
-            );
-            continue;
-          }
-
-          // Automatically process new recommenders
-          console.log(
-            chalk.green(`Processing ${recommender.name} (new recommender)`)
-          );
-
-          // Navigate to recommender's profile by clicking their name
-          console.log(chalk.blue("Navigating to recommender's profile..."));
-          const currentUrl = await navigateToRecommenderProfile(
-            page,
-            recommender.name
-          );
-
-          await processRecommender(page, recommender.name, currentUrl, url);
-        } catch (error) {
-          console.error(
-            chalk.red(`Error processing recommender "${recommender.name}":`)
-          );
-          console.error(error);
-          // Try to go back to main page before continuing
-          await page.goto(url);
+        if (!recommenders || recommenders.length === 0) {
+          console.log(chalk.yellow(`No recommenders found for category: ${category}`));
           continue;
         }
+
+        console.log(chalk.green(`Found ${recommenders.length} recommenders in this category`));
+
+        // Check which recommenders are already in the database
+        console.log(
+          chalk.blue("\nChecking existing recommenders in database...")
+        );
+        const recommenderStatus = await Promise.all(
+          recommenders.map(async (recommender) => {
+            const existingId = await checkExistingPerson(recommender.name);
+            return {
+              name: recommender.name,
+              exists: !!existingId,
+              id: existingId,
+              category,
+            };
+          })
+        );
+
+        // Log the plan for this category
+        console.log(chalk.blue("\nProcessing plan for this category:"));
+        recommenderStatus.forEach((recommender) => {
+          if (recommender.exists) {
+            console.log(
+              chalk.yellow(`- ${recommender.name} (already in database)`)
+            );
+          } else {
+            console.log(chalk.green(`- ${recommender.name} (will process)`));
+          }
+        });
+
+        // Process each recommender in this category
+        for (const recommender of recommenderStatus) {
+          try {
+            console.log(
+              chalk.blue("\nFound recommender:"),
+              chalk.white(recommender.name)
+            );
+
+            // Skip existing recommenders
+            if (recommender.exists) {
+              console.log(
+                chalk.yellow(`Skipping ${recommender.name} (already in database)`)
+              );
+              continue;
+            }
+
+            // Automatically process new recommenders
+            console.log(
+              chalk.green(`Processing ${recommender.name} (new recommender)`)
+            );
+
+            // Navigate to recommender's profile by clicking their name
+            console.log(chalk.blue("Navigating to recommender's profile..."));
+            const currentUrl = await navigateToRecommenderProfile(
+              page,
+              recommender.name
+            );
+
+            await processRecommender(page, recommender.name, currentUrl, url);
+          } catch (error) {
+            console.error(
+              chalk.red(`Error processing recommender "${recommender.name}":`)
+            );
+            console.error(error);
+            // Try to go back to main page before continuing
+            await page.goto(url);
+            continue;
+          }
+        }
+
+        console.log(chalk.green(`\n✓ Completed processing category: ${category}`));
       }
     } else if (urlType === "multiple") {
       // New flow for multiple recommenders
