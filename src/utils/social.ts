@@ -5,8 +5,11 @@ import { z } from "zod";
 export async function findSocialUrl(
   page: any,
   personName: string,
-  type: string,
+  type: string
 ): Promise<string | null> {
+    
+  // Set timeout for 3 seconds
+  await new Promise((resolve) => setTimeout(resolve, 3000));
   await page.goto("https://www.google.com");
   const searchQuery = `${personName} (${type}) website`;
 
@@ -17,7 +20,8 @@ export async function findSocialUrl(
   await new Promise((resolve) => setTimeout(resolve, 3000));
 
   const { links } = await page.extract({
-    instruction: "Extract the first link from the search results. Make sure it is a valid URL.",
+    instruction:
+      "Extract the first link from the search results that looks like the person's website or about page. Make sure it is a valid URL.",
     schema: z.object({
       links: z.array(z.string()),
     }),
@@ -26,7 +30,9 @@ export async function findSocialUrl(
 
   if (links && links.length > 0) {
     console.log(chalk.cyan(`\nFound link: ${links[0]}`));
-    return type.toLowerCase() === "twitter" ? sanitizeTwitterUrl(links[0]) : links[0];
+    return type.toLowerCase() === "twitter"
+      ? sanitizeTwitterUrl(links[0])
+      : links[0];
   }
 
   return null;
