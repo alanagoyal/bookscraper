@@ -8,13 +8,13 @@ export async function findSocialUrl(
   type: string,
 ): Promise<string | null> {
   await page.goto("https://www.google.com");
-  const searchQuery = `${personName} (${type})`;
+  const searchQuery = `${personName} (${type}) website`;
 
   await page.act(`Type '${searchQuery}' into the search input`);
   await page.act("Press Enter");
 
-  // Set timeout for 2 seconds
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  // Set timeout for 3 seconds
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 
   const { links } = await page.extract({
     instruction: "Extract the first link from the search results. Make sure it is a valid URL.",
