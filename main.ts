@@ -179,105 +179,51 @@ async function extractBookRecommendations(page: Page, personName?: string) {
 }
 
 // Extract list of recommenders from the page for each category
-async function extractRecommendersList(page: Page) {
-  const categories = [
-    "Classicists",
-    "Comedians & Humorists",
-    "Cooks & Food Writers",
-    "Development & Aid Workers (see also Economists)",
-    "Diplomats & Former Diplomats",
-    "Economists",
-    "Entrepreneurs & Business People",
-    "Environmentalists",
-    "Film Critics & Scholars",
-    "Film Directors",
-    "Five Books Editors",
-    "Foreign Correspondents",
-    "Fund Managers & Investors",
-    "Gardeners & Gardening Experts",
-    "Geologists",
-    "Historians",
-    "Historical Novelists",
-    "Intelligence Agents & Analysts",
-    "International Relations",
-    "Journalists",
-    "Lawyers",
-    "Librarians",
-    "Linguists",
-    "Literary Scholars",
-    "Magicians",
-    "Mathematicians",
-    "Medical Scientists",
-    "Memoirists",
-    "Military Historians & Veterans",
-    "Miscellaneous",
-    "Musicians, Music Critics & Scholars",
-    "Nonprofit Leaders & Activists",
-    "Novelists",
-    "Painters",
-    "Philosophers",
-    "Photographers",
-    "Physicists",
-    "Poets",
-    "Policemen",
-    "Policy Analysts",
-    "Political Commentators",
-    "Political Scientists",
-    "Politicians",
-    "Psychologists",
-    "Publishers",
-    "Science Writers",
-    "Scientists",
-    "Short Story Writers",
-    "Social Scientists",
-    "Sociologists",
-    "Sportspersons & Sportswriters",
-    "Teachers",
-    "Technologists",
-    "Theatre Critics",
-    "Theologians & Historians of Religion",
-    "Thriller and Crime Writers",
-    "Translators",
-    "Travel Writers",
-    "US Supreme Court Justices"
-  ];
+async function extractRecommendersList(page: Page, category: string) {
+  console.log(chalk.blue(`Extracting recommenders for category: ${category}...`));
+  
+  // Cache the observe results for finding the category section
+  const categoryResults = await page.observe(`Find the section for category "${category}"`);
+  
+  // Extract recommenders under this category heading
+  const { recommenders } = await page.extract({
+    instruction: `Extract all expert names listed under the heading "${category}". Get their names only.`,
+    schema: z.object({
+      recommenders: z.array(
+        z.object({
+          name: z.string(),
+        })
+      ),
+    }),
+    useTextExtract: false, // Use HTML parsing instead of text extraction
+  });
 
-  const allRecommenders: Array<{ name: string; category: string }> = [];
+  // Add category information and cached observe results to each recommender
+  const recommendersWithCategory = recommenders.map(r => ({
+    ...r,
+    category,
+    categoryResults
+  }));
 
-  for (const category of categories) {
-    console.log(chalk.blue(`Extracting recommenders for category: ${category}...`));
-    
-    // Extract recommenders under this category heading
-    const { recommenders } = await page.extract({
-      instruction: `Extract all expert names listed under the heading "${category}". Get their names only.`,
-      schema: z.object({
-        recommenders: z.array(
-          z.object({
-            name: z.string(),
-          })
-        ),
-      }),
-      useTextExtract: false, // Use HTML parsing instead of text extraction
-    });
-
-    // Add category information to each recommender
-    const recommendersWithCategory = recommenders.map(r => ({
-      ...r,
-      category
-    }));
-
-    allRecommenders.push(...recommendersWithCategory);
-  }
-
-  return allRecommenders;
+  return recommendersWithCategory;
 }
 
 // Navigate to the recommender's profile
 async function navigateToRecommenderProfile(
   page: Page,
-  recommenderName: string
+  recommenderName: string,
+  categoryResults: any
 ): Promise<string> {
-  await page.act(`Click on ${recommenderName}'s profile or name`);
+  // First observe to find the specific category section using cached results
+  await page.act(categoryResults[0]);
+  
+  // Then click the specific name within that section
+  const nameResults = await page.observe({
+    instruction: `Click on ${recommenderName}'s profile or name within the current section`,
+    onlyVisible: true // Ensure we only target visible elements in the current section
+  });
+  
+  await page.act(nameResults[0]);
   return page.url();
 }
 
@@ -510,39 +456,8 @@ export async function main({
       // Original flow for collection of recommenders
       console.log(chalk.blue("Processing recommenders by category..."));
 
+      // Process each category
       const categories = [
-        "Classicists",
-        "Comedians & Humorists",
-        "Cooks & Food Writers",
-        "Development & Aid Workers (see also Economists)",
-        "Diplomats & Former Diplomats",
-        "Economists",
-        "Entrepreneurs & Business People",
-        "Environmentalists",
-        "Film Critics & Scholars",
-        "Film Directors",
-        "Five Books Editors",
-        "Foreign Correspondents",
-        "Fund Managers & Investors",
-        "Gardeners & Gardening Experts",
-        "Geologists",
-        "Historians",
-        "Historical Novelists",
-        "Intelligence Agents & Analysts",
-        "International Relations",
-        "Journalists",
-        "Lawyers",
-        "Librarians",
-        "Linguists",
-        "Literary Scholars",
-        "Magicians",
-        "Mathematicians",
-        "Medical Scientists",
-        "Memoirists",
-        "Military Historians & Veterans",
-        "Miscellaneous",
-        "Musicians, Music Critics & Scholars",
-        "Nonprofit Leaders & Activists",
         "Novelists",
         "Painters",
         "Philosophers",
@@ -569,25 +484,13 @@ export async function main({
         "Thriller and Crime Writers",
         "Translators",
         "Travel Writers",
-        "US Supreme Court Justices"
       ];
 
-      // Process each category
       for (const category of categories) {
         console.log(chalk.green(`\n=== Processing Category: ${category} ===`));
         
         // Extract recommenders for this category
-        const { recommenders } = await page.extract({
-          instruction: `Extract all expert names listed under the heading "${category}". Get their names only.`,
-          schema: z.object({
-            recommenders: z.array(
-              z.object({
-                name: z.string(),
-              })
-            ),
-          }),
-          useTextExtract: false, // Use HTML parsing instead of text extraction
-        });
+        const recommenders = await extractRecommendersList(page, category);
 
         if (!recommenders || recommenders.length === 0) {
           console.log(chalk.yellow(`No recommenders found for category: ${category}`));
@@ -607,7 +510,8 @@ export async function main({
               name: recommender.name,
               exists: !!existingId,
               id: existingId,
-              category,
+              category: recommender.category,
+              categoryResults: recommender.categoryResults
             };
           })
         );
@@ -649,7 +553,8 @@ export async function main({
             console.log(chalk.blue("Navigating to recommender's profile..."));
             const currentUrl = await navigateToRecommenderProfile(
               page,
-              recommender.name
+              recommender.name,
+              recommender.categoryResults
             );
 
             await processRecommender(page, recommender.name, currentUrl, url);

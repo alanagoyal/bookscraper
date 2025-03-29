@@ -30,9 +30,7 @@ export async function findSocialUrl(
 
   if (links && links.length > 0) {
     console.log(chalk.cyan(`\nFound link: ${links[0]}`));
-    return type.toLowerCase() === "twitter"
-      ? sanitizeTwitterUrl(links[0])
-      : links[0];
+    return sanitizeTwitterUrl(links[0]);
   }
 
   return null;
