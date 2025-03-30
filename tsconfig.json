@@ -12,6 +12,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["*.ts", "api", "examples/run.ts", "src/scripts/amazon.ts", "src/scripts/embeddings.ts"],
+  "include": ["*.ts", "api", "examples/run.ts", "src/scripts/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
