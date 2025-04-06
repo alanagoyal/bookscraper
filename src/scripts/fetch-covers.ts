@@ -28,19 +28,42 @@ async function searchOpenLibrary(title: string, author: string) {
   }
 }
 
-async function getCoverUrl(identifier: string, type: "isbn" | "olid") {
+async function checkCoverExists(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${url}?default=false`);
+    return response.ok;
+  } catch (error) {
+    console.error(`Error checking cover at ${url}:`, error);
+    return false;
+  }
+}
+
+async function getCoverUrl(identifier: string, type: "isbn" | "olid"): Promise<string | null> {
   const size = "L"; // Large size cover
-  return `https://covers.openlibrary.org/b/${type}/${identifier}-${size}.jpg`;
+  const url = `https://covers.openlibrary.org/b/${type}/${identifier}-${size}.jpg`;
+  const exists = await checkCoverExists(url);
+  return exists ? url : null;
 }
 
 async function main() {
+  console.log("Fetching books from database...");
+  
   // Get all books from the database
   const { data: books, error } = await supabase
     .from("books")
-    .select("id, title, author");
+    .select("id, title, author")
+    .is("cover_url", null)
+    .order("created_at", { ascending: true });
 
   if (error) {
     console.error("Error fetching books:", error);
+    return;
+  }
+
+  console.log(`Found ${books?.length || 0} books in database`);
+
+  if (!books || books.length === 0) {
+    console.error("No books found in database");
     return;
   }
 
@@ -52,23 +75,63 @@ async function main() {
     
     // Search for book identifiers
     const identifiers = await searchOpenLibrary(book.title, book.author);
+    console.log("Identifiers found:", identifiers);
     
     if (!identifiers) {
       console.log(`❌ No identifiers found for: ${book.title}`);
       notFoundCount++;
+      
+      // Update database with null cover_url
+      const { error: updateError } = await supabase
+        .from("books")
+        .update({ cover_url: null })
+        .eq("id", book.id);
+
+      if (updateError) {
+        console.error("Error updating database:", updateError);
+      }
+        
       continue;
     }
 
-    // Log cover URLs if found
+    // Try ISBN first, then fall back to OLID
+    let coverUrl = null;
     if (identifiers.isbn) {
-      console.log(`📚 ISBN Cover URL: ${await getCoverUrl(identifiers.isbn, "isbn")}`);
+      coverUrl = await getCoverUrl(identifiers.isbn, "isbn");
+      if (coverUrl) {
+        console.log(`📚 Found ISBN cover: ${coverUrl}`);
+      }
+    }
+    
+    if (!coverUrl && identifiers.olid) {
+      coverUrl = await getCoverUrl(identifiers.olid, "olid");
+      if (coverUrl) {
+        console.log(`📚 Found OLID cover: ${coverUrl}`);
+      }
+    }
+
+    // Update database
+    if (coverUrl) {
       foundCount++;
-    } else if (identifiers.olid) {
-      console.log(`📚 OLID Cover URL: ${await getCoverUrl(identifiers.olid, "olid")}`);
-      foundCount++;
+      const { error: updateError } = await supabase
+        .from("books")
+        .update({ cover_url: coverUrl })
+        .eq("id", book.id);
+
+      if (updateError) {
+        console.error("Error updating database:", updateError);
+      }
     } else {
-      console.log(`❌ No cover found for: ${book.title}`);
       notFoundCount++;
+      console.log(`❌ No cover found for: ${book.title}`);
+      const { error: updateError } = await supabase
+        .from("books")
+        .update({ cover_url: null })
+        .eq("id", book.id);
+
+      if (updateError) {
+        console.error("Error updating database:", updateError);
+      }
     }
 
     // Add a small delay to avoid rate limiting
