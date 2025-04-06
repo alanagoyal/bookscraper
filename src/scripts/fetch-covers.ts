@@ -39,7 +39,7 @@ async function checkCoverExists(url: string): Promise<boolean> {
 }
 
 async function getCoverUrl(identifier: string, type: "isbn" | "olid"): Promise<string | null> {
-  const size = "L"; // Large size cover
+  const size = "M"; // Medium size cover
   const url = `https://covers.openlibrary.org/b/${type}/${identifier}-${size}.jpg`;
   const exists = await checkCoverExists(url);
   return exists ? url : null;
