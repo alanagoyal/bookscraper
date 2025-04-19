@@ -2,25 +2,26 @@ import { supabase } from "../services/supabase.ts";
 import { categorizePerson } from "../utils/person.ts";
 
 const VALID_TYPES = [
-  "Anthropologists & Social Scientists",
-  "Architects & Design Experts",
-  "Art Historians, Critics & Visual Artists",
-  "Authors & Writers",
-  "Biographers & Memoirists",
-  "Biologists, Physicists & Medical Scientists",
-  "Broadcasters, Journalists & Media Commentators",
-  "Comedians, Magicians & Entertainers",
-  "Cooks, Food Writers & Culinary Experts",
-  "Economists & Policy Experts",
-  "Entrepreneurs & Startup Founders",
-  "Venture Capitalists & Investors",
-  "Business Leaders & Executives",
-  "Product Managers, Designers & Engineers",
-  "Historians, Philosophers & Theologians",
-  "Musicians, Music Critics & Filmmakers",
-  "Technologists & Mathematicians",
-  "Librarians & Teachers",
+  "Engineer or Product Manager",
+  "Entertainer",
+  "Musician or Filmmaker",
+  "Chef or Food Writer",
+  "Librarian or Teacher",
+  "Historian or Philosopher",
+  "Scientist",
+  "Technologist",
+  "Art Critic",
+  "Journalist",
+  "Executive",
+  "Biographer",
+  "Investor",
+  "Economist",
+  "Anthropologist",
+  "Architect or Designer",
+  "Entrepreneur",
+  "Author",
 ];
+
 
 // To run: npx tsx person.ts
 async function run() {

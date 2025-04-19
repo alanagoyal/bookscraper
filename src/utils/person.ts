@@ -19,3 +19,17 @@ export async function categorizePerson(person: string) {
     });
     return result;
   }
+
+  // Helper function to generate description using braintrust
+  export async function generateDescription(full_name: string, type: string) {
+    const result = await invoke({
+      projectName: "booklist",
+      slug: "describe-person-bda8",
+      input: { full_name, type },
+      schema: z.object({
+        description: z.string()
+      }),
+    });
+    return result;
+  }
+    
