@@ -2,14 +2,14 @@ import { supabase } from "../services/supabase.ts";
 import { categorizePerson } from "../utils/person.ts";
 
 const VALID_TYPES = [
-  "Engineer or Product Manager",
+  "Product Manager or Designer",
   "Entertainer",
   "Musician or Filmmaker",
   "Chef or Food Writer",
   "Librarian or Teacher",
   "Historian or Philosopher",
   "Scientist",
-  "Technologist",
+  "Engineer or Technologist",
   "Art Critic",
   "Journalist",
   "Executive",
@@ -17,11 +17,10 @@ const VALID_TYPES = [
   "Investor",
   "Economist",
   "Anthropologist",
-  "Architect or Designer",
+  "Architect",
   "Entrepreneur",
-  "Author",
+  "Author or Publisher",
 ];
-
 
 // To run: npx tsx person.ts
 async function run() {
