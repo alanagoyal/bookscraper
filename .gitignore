@@ -5,3 +5,5 @@ downloads
 .DS_Store
 dist
 cache.json
+memory.*
+.mastra/
