@@ -1,39 +1,67 @@
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { TokenLimiter } from '@mastra/memory/processors';
-import { getRecommendationsForPersonTool, getRecommendationsForBookTool, getRecommendationsForPersonTypeTool, getRecommendationsForGenreTool, getRecommendationsForTwoPeopleTool, getTopOverlappingRecommendersTool, getTopGenresByPersonTypeTool, getMostSimilarTypesTool, getGenreCountByTypeTool, getGenreOutliersInTypeTool, getBooksBySingleTypeTool, getMostDiverseRecommendersTool, getBooksWithMostTypeDiversityTool, getTopGenresByRecommendersTool, getGenreOverlapStatsTool, getRecommendationDistributionTool, getBooksByEmbeddingSimilarityTool, getPersonEmbeddingCentroidTool, getTypeEmbeddingCentroidTool } from '../tools';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { TokenLimiter } from "@mastra/memory/processors";
+import {
+  getRecommendationsForPersonTool,
+  getRecommendationsForBookTool,
+  getRecommendationsForPersonTypeTool,
+  getRecommendationsForGenreTool,
+  getRecommendationsForTwoPeopleTool,
+  getTopOverlappingRecommendersTool,
+  getTopGenresByPersonTypeTool,
+  getMostSimilarTypesTool,
+  getGenreCountByTypeTool,
+  getGenreOutliersInTypeTool,
+  getBooksBySingleTypeTool,
+  getMostDiverseRecommendersTool,
+  getBooksWithMostTypeDiversityTool,
+  getTopGenresByRecommendersTool,
+  getGenreOverlapStatsTool,
+  getRecommendationDistributionTool,
+  getSimilarBooksToBookByDescriptionTool,
+  getSimilarPeopleByDescriptionEmbeddingTool,
+} from "../tools";
 
 export const booklistAgent = new Agent({
-  name: 'Booklist Agent',
+  name: "Booklist Agent",
   instructions: `
-      You are an expert book recommendation agent with deep knowledge of literature and reading preferences.
+      you are analyzing a dataset of over 12,000 book recommendations from 2,000 notable people — engineers, philosophers, investors, chefs, and more.
 
-      Your primary functions are to:
-      - Provide personalized book recommendations based on user preferences, genres, or similar books
-      - Find connections between books, authors, and reading patterns
-      - Analyze reading preferences and suggest books that match specific criteria
-      - Help users discover new books and authors they might enjoy
+you have access to tools that let you query genres, types, recommendations, embeddings, and relationships between people and books. your goal is to generate the structure for a data-driven blog post that surfaces interesting literary and cultural insights.
 
-      When making recommendations:
-      - Consider the user's reading history and preferences if provided
-      - Include a brief explanation of why each book was recommended
-      - Mention relevant details like genre, themes, and writing style
-      - If recommending based on another book, explain the connections
-      - Keep responses focused and informative
-      - Suggest 3-5 books unless specifically asked for more
+## 🧠 your task:
 
-      Use the available tools to:
-      - Get general book recommendations
-      - Find books similar to a specific book
-      - Get recommendations for specific person types or genres
-      - Find books that would appeal to multiple people
+for each question, answer with:
+- a table summarizing the data
+- a short summary of the data
+- 1-2 interesting insights or patterns
+- 1-2 sentences on what that could mean or why it's interesting
 `,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4.1-mini"),
   memory: new Memory({
     processors: [
       new TokenLimiter(127000), // Set token limit for GPT-4
     ],
   }),
-  tools: { getRecommendationsForPersonTool, getRecommendationsForBookTool, getRecommendationsForPersonTypeTool, getRecommendationsForGenreTool, getRecommendationsForTwoPeopleTool, getTopOverlappingRecommendersTool, getTopGenresByPersonTypeTool, getMostSimilarTypesTool, getGenreCountByTypeTool, getGenreOutliersInTypeTool, getBooksBySingleTypeTool, getMostDiverseRecommendersTool, getBooksWithMostTypeDiversityTool, getTopGenresByRecommendersTool, getGenreOverlapStatsTool, getRecommendationDistributionTool, getBooksByEmbeddingSimilarityTool, getPersonEmbeddingCentroidTool, getTypeEmbeddingCentroidTool }, // all of the tools from /tools
+  tools: {
+    getRecommendationsForPersonTool,
+    getRecommendationsForBookTool,
+    getRecommendationsForPersonTypeTool,
+    getRecommendationsForGenreTool,
+    getRecommendationsForTwoPeopleTool,
+    getTopOverlappingRecommendersTool,
+    getTopGenresByPersonTypeTool,
+    getMostSimilarTypesTool,
+    getGenreCountByTypeTool,
+    getGenreOutliersInTypeTool,
+    getBooksBySingleTypeTool,
+    getMostDiverseRecommendersTool,
+    getBooksWithMostTypeDiversityTool,
+    getTopGenresByRecommendersTool,
+    getGenreOverlapStatsTool,
+    getRecommendationDistributionTool,
+    getSimilarBooksToBookByDescriptionTool,
+    getSimilarPeopleByDescriptionEmbeddingTool,
+  }, // all of the tools from /tools
 });

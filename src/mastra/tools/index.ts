@@ -624,6 +624,7 @@ export const getMostGenreDiverseRecommendersTool = createTool({
   },
 });
 
+// Tool to find pairs of types with the most similar book tastes
 export const getMostSimilarTypesTool = createTool({
   id: 'get-most-similar-types',
   description: 'Find which types of people have the most similar book taste (overlapping books)',
@@ -642,6 +643,7 @@ export const getMostSimilarTypesTool = createTool({
   }
 });
 
+// Tool to find the number of genres recommended by each type of person
 export const getGenreCountByTypeTool = createTool({
   id: 'get-genre-count-by-type',
   description: 'See which types recommend the widest variety of genres',
@@ -659,6 +661,7 @@ export const getGenreCountByTypeTool = createTool({
   }
 });
 
+// Tool to find people who recommend only one genre while others in their type recommend many
 export const getGenreOutliersInTypeTool = createTool({
   id: 'get-genre-outliers-in-type',
   description: 'Find people who recommend only one genre while others in their type recommend many',
@@ -678,6 +681,7 @@ export const getGenreOutliersInTypeTool = createTool({
   }
 });
 
+// Tool to find books that are only recommended by one type of person
 export const getBooksBySingleTypeTool = createTool({
   id: 'get-books-by-single-type',
   description: 'Find books that are only recommended by one type of person',
@@ -696,6 +700,7 @@ export const getBooksBySingleTypeTool = createTool({
   }
 });
 
+// Tool to find people who recommend across the most genres
 export const getMostDiverseRecommendersTool = createTool({
   id: 'get-most-diverse-recommenders',
   description: 'Find people who recommend across the most genres',
@@ -714,6 +719,7 @@ export const getMostDiverseRecommendersTool = createTool({
   }
 });
 
+// Tool to find books recommended by the widest variety of types
 export const getBooksWithMostTypeDiversityTool = createTool({
   id: 'get-books-with-most-type-diversity',
   description: 'Find books recommended by the widest variety of types',
@@ -732,6 +738,7 @@ export const getBooksWithMostTypeDiversityTool = createTool({
   }
 });
 
+// Tool to find which genres are recommended by the most unique people
 export const getTopGenresByRecommendersTool = createTool({
   id: 'get-top-genres-by-recommenders',
   description: 'Find which genres are recommended by the most unique people',
@@ -749,6 +756,7 @@ export const getTopGenresByRecommendersTool = createTool({
   }
 });
 
+// Tool to analyze genre overlap: avg books per recommender and vice versa
 export const getGenreOverlapStatsTool = createTool({
   id: 'get-genre-overlap-stats',
   description: 'Analyze genre overlap: avg books per recommender and vice versa',
@@ -767,6 +775,7 @@ export const getGenreOverlapStatsTool = createTool({
   }
 });
 
+// Tool to get recommendation counts per book (for popularity or power-law analysis)
 export const getRecommendationDistributionTool = createTool({
   id: 'get-recommendation-distribution',
   description: 'Get recommendation counts per book (for popularity or power-law analysis)',
@@ -785,6 +794,7 @@ export const getRecommendationDistributionTool = createTool({
   }
 });
 
+// Tool to find books that are recommended by the most people overall
 export const getMostRecommendedBooksTool = createTool({
   id: 'get-most-recommended-books',
   description: 'Find books that are recommended by the most people overall',
@@ -803,6 +813,7 @@ export const getMostRecommendedBooksTool = createTool({
   }
 });
 
+// Tool to find people whose book recs show up most in other people’s lists (influence score)
 export const getInfluentialRecommendersTool = createTool({
   id: 'get-influential-recommenders',
   description: 'Find people whose book recs show up most in other people’s lists (influence score)',
@@ -821,67 +832,55 @@ export const getInfluentialRecommendersTool = createTool({
   }
 });
 
-export const getBooksByEmbeddingSimilarityTool = createTool({
-  id: 'get-books-by-embedding-similarity',
-  description: 'Find books most similar to a given embedding vector (e.g. a genre or type centroid)',
+// Tool to find the top 3 people with the most similar description-based book taste to a given person
+export const getSimilarPeopleByDescriptionEmbeddingTool = createTool({
+  id: 'get-similar-people-by-description-embedding',
+  description: 'Find the top 3 people with the most similar description-based book taste to a given person',
   inputSchema: z.object({
-    embedding: z.array(z.number()).describe('A 1536-dim vector'),
-    match_count: z.number().default(10)
+    person_id: z.string()
+  }),
+  outputSchema: z.object({
+    people: z.array(z.object({
+      person_id: z.string(),
+      full_name: z.string(),
+      type: z.string().nullable(),
+      similarity: z.number()
+    }))
+  }),
+  execute: async ({ context }) => {
+    const { data, error } = await supabase.rpc('get_similar_people_by_description_embedding', {
+      person_id_arg: context.person_id
+    });
+    if (error) throw new Error(error.message);
+    return { people: data };
+  }
+});
+
+// Tool to find the top 3 books most similar in description to a given book
+export const getSimilarBooksToBookByDescriptionTool = createTool({
+  id: 'get-similar-books-to-book-by-description',
+  description: 'Find the top 3 books most similar in description to a given book',
+  inputSchema: z.object({
+    book_id: z.string()
   }),
   outputSchema: z.object({
     books: z.array(z.object({
       id: z.string(),
       title: z.string(),
       author: z.string(),
-      genre: z.string(),
+      genre: z.array(z.string()),
       description: z.string().nullable(),
       amazon_url: z.string().nullable(),
       similarity: z.number()
     }))
   }),
   execute: async ({ context }) => {
-    const { data, error } = await supabase.rpc('get_books_by_embedding_similarity', {
-      embedding: context.embedding,
-      match_count: context.match_count
+    const { data, error } = await supabase.rpc('get_similar_books_to_book_by_description', {
+      book_id_arg: context.book_id
     });
     if (error) throw new Error(error.message);
     return { books: data };
   }
 });
 
-export const getPersonEmbeddingCentroidTool = createTool({
-  id: 'get-person-embedding-centroid',
-  description: 'Get the average embedding of books recommended by a person',
-  inputSchema: z.object({
-    person_id: z.string()
-  }),
-  outputSchema: z.object({
-    embedding: z.array(z.number())
-  }),
-  execute: async ({ context }) => {
-    const { data, error } = await supabase.rpc('get_person_embedding_centroid', {
-      person_id_arg: context.person_id
-    });
-    if (error) throw new Error(error.message);
-    return { embedding: data?.[0]?.embedding ?? [] };
-  }
-});
-
-export const getTypeEmbeddingCentroidTool = createTool({
-  id: 'get-type-embedding-centroid',
-  description: 'Get the average embedding of books recommended by people of a given type',
-  inputSchema: z.object({
-    type: z.string()
-  }),
-  outputSchema: z.object({
-    embedding: z.array(z.number())
-  }),
-  execute: async ({ context }) => {
-    const { data, error } = await supabase.rpc('get_type_embedding_centroid', {
-      type_arg: context.type
-    });
-    if (error) throw new Error(error.message);
-    return { embedding: data?.[0]?.embedding ?? [] };
-  }
-});
 
