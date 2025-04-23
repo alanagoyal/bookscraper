@@ -1,7 +1,7 @@
 import { supabase } from '../services/supabase.ts';
 import { createBookEmbeddings } from '../utils/embeddings.ts';
 
-// To run: npx tsx embeddings.ts
+// To run: npx tsx book-embeddings.ts
 async function run() {
   try {
     // Get all books
@@ -23,8 +23,8 @@ async function run() {
       try {
         const { title, author, description } = book;
         
-        if (title && author && description) {
-          console.log(`Creating embeddings for: "${title}" by ${author}`);
+        if (description) {
+          console.log(`Creating embeddings for: "${title}"`);
 
           // Create embeddings
           const embeddings = await createBookEmbeddings(title, author, description);

@@ -6,6 +6,10 @@ interface BookEmbeddings {
   description_embedding: number[];
 }
 
+interface PersonEmbeddings {
+  description_embedding: number[];
+}
+
 // Helper function to create embeddings for a single field
 export async function createFieldEmbedding(text: string) {
   const response = await openai.embeddings.create({
@@ -31,6 +35,21 @@ export async function createBookEmbeddings(
   return {
     title_embedding,
     author_embedding,
+    description_embedding,
+  };
+}
+
+// Helper function to create embeddings for a person
+export async function createPersonEmbeddings(
+  full_name: string,
+  description: string
+): Promise<PersonEmbeddings> {
+  const [description_embedding] =
+    await Promise.all([
+      createFieldEmbedding(description),
+    ]);
+
+  return {
     description_embedding,
   };
 }
