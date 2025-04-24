@@ -10,6 +10,7 @@ async function updateSimilarBooks() {
   const { data: books, error } = await supabase
     .from('books')
     .select('id')
+    .is('similar_books', null)
     .not('description_embedding', 'is', null);
 
   if (error || !books) {
@@ -53,7 +54,11 @@ async function updateSimilarBooks() {
 }
 
 async function updateSimilarPeople() {
-  const { data: people, error } = await supabase.from('people').select('id');
+  const { data: people, error } = await supabase
+    .from('people')
+    .select('id')
+    .is('similar_people', null)
+    .not('description_embedding', 'is', null);
 
   if (error || !people) {
     console.error('Error fetching people:', error);
