@@ -21,6 +21,9 @@ import {
   getRecommendationDistributionTool,
   getSimilarBooksToBookByDescriptionTool,
   getSimilarPeopleByDescriptionEmbeddingTool,
+  getTopSimilarBooksWithOverlapTool,
+  getTopSimilarPeopleWithOverlapTool,
+  getInfluentialRecommendersTool,
 } from "../tools";
 
 export const booklistAgent = new Agent({
@@ -63,5 +66,8 @@ for each question, answer with:
     getRecommendationDistributionTool,
     getSimilarBooksToBookByDescriptionTool,
     getSimilarPeopleByDescriptionEmbeddingTool,
+    getTopSimilarBooksWithOverlapTool,
+    getTopSimilarPeopleWithOverlapTool,
+    getInfluentialRecommendersTool,
   }, // all of the tools from /tools
 });
