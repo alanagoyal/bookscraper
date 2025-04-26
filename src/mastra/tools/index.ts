@@ -2,36 +2,6 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { supabase } from "../../services/supabase";
 
-interface Book {
-  id: string;
-  title: string;
-  author: string;
-  description: string | null;
-  amazon_url: string | null;
-  genre: string[];
-}
-
-interface Person {
-  id: string;
-  full_name: string;
-  description: string | null;
-  type: string | null;
-  url: string | null;
-}
-
-interface Recommendation {
-  id: string;
-  book_id: string;
-  person_id: string;
-  source: string;
-  source_link: string | null;
-}
-
-interface RecommendationWithBookAndPerson extends Recommendation {
-  book: Book;
-  person: Person;
-}
-
 interface RecommendationType {
   id: string;
   book_id: string;
@@ -53,10 +23,6 @@ interface RecommendationType {
     description: string | null;
     url: string | null;
   };
-}
-
-interface RecommendationsResponse {
-  recommendations: RecommendationType[];
 }
 
 interface RawRecommendation {
@@ -429,7 +395,7 @@ export const getRecommendationsForGenreTool = createTool({
         )
       `
       )
-      .eq("book.genre", context.genre);
+      .filter('book.genre', 'cs', `{${context.genre}}`);
 
     if (queryError) {
       throw new Error(`Error querying recommendations: ${queryError.message}`);
