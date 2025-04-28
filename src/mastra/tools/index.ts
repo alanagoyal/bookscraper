@@ -8,7 +8,7 @@ interface RecommendationType {
   person_id: string;
   source: string;
   source_link: string | null;
-  book?: {
+  book: {
     id: string;
     title: string;
     author: string;
@@ -182,6 +182,14 @@ export const getRecommendationsForBookTool = createTool({
           type: z.string().nullable(),
           url: z.string().nullable(),
         }),
+        book: z.object({
+          id: z.string(),
+          title: z.string(),
+          author: z.string(),
+          description: z.string().nullable(),
+          amazon_url: z.string().nullable(),
+          genre: z.array(z.string()),
+        }),
       })
     ),
   }),
@@ -216,6 +224,14 @@ export const getRecommendationsForBookTool = createTool({
         person_id,
         source,
         source_link,
+        book:books(
+          id,
+          title,
+          author,
+          description,
+          amazon_url,
+          genre
+        ),
         person:people(
           id,
           full_name,
@@ -235,6 +251,7 @@ export const getRecommendationsForBookTool = createTool({
     const recommendations = rawRecommendations?.map((rec) => ({
       ...rec,
       person: Array.isArray(rec.person) ? rec.person[0] : rec.person,
+      book: Array.isArray(rec.book) ? rec.book[0] : rec.book,
     })) as RecommendationType[];
 
     return { recommendations };
@@ -247,6 +264,7 @@ export const getRecommendationsForPersonTypeTool = createTool({
   description: "Get recommendations from a specific type of person",
   inputSchema: z.object({
     type: z.string().describe("Person type"),
+    limit: z.number().optional().default(10),
   }),
   outputSchema: z.object({
     recommendations: z.array(
@@ -301,6 +319,7 @@ export const getRecommendationsForPersonTypeTool = createTool({
         )
       `
       )
+      .limit(context.limit)
       .eq("person.type", context.type);
 
     if (queryError) {
@@ -341,6 +360,7 @@ export const getRecommendationsForGenreTool = createTool({
   description: "Get recommendations from a specific genre",
   inputSchema: z.object({
     genre: z.string().describe("Genre"),
+    limit: z.number().optional().default(10),
   }),
   outputSchema: z.object({
     recommendations: z.array(
@@ -395,7 +415,8 @@ export const getRecommendationsForGenreTool = createTool({
         )
       `
       )
-      .filter('book.genre', 'cs', `{${context.genre}}`);
+      .filter('book.genre', 'cs', `{${context.genre}}`)
+      .limit(context.limit);
 
     if (queryError) {
       throw new Error(`Error querying recommendations: ${queryError.message}`);
@@ -430,8 +451,8 @@ export const getRecommendationsForGenreTool = createTool({
 });
 
 // Tool to get the count of recommendations two people have in common
-export const getRecommendationsForTwoPeopleTool = createTool({
-  id: "get-recommendations-for-two-people",
+export const getPeopleMutualRecommendationsTool = createTool({
+  id: "get-people-mutual-recommendations",
   description: "Get the count of recommendations two people have in common",
   inputSchema: z.object({
     person1_name: z.string().describe("Full name of first person"),
@@ -439,6 +460,14 @@ export const getRecommendationsForTwoPeopleTool = createTool({
   }),
   outputSchema: z.object({
     count: z.number(),
+    books: z.array(z.object({
+      id: z.string(),
+      title: z.string(),
+      author: z.string(),
+      description: z.string(),
+      amazon_url: z.string(),
+      genre: z.string()
+    }))
   }),
   execute: async ({ context }) => {
     // First find both people by their names
@@ -533,13 +562,35 @@ export const getRecommendationsForTwoPeopleTool = createTool({
       return acc;
     }, {} as Record<string, number>);
 
-    const commonBooks = Object.values(bookCounts).filter(
-      (count) => count === 2
+    // Get the common book ids
+    const commonBookIds = Object.keys(bookCounts).filter(
+      (id) => bookCounts[id] === 2
     );
 
-    return { count: commonBooks.length };
+    // Map commonBookIds to their corresponding book objects (deduplicated)
+    const commonBooks = commonBookIds.map((id) => {
+      const rec = recommendations.find((r) => r.book_id === id);
+      if (!rec) {
+        throw new Error(`Common book not found for book_id: ${id}`);
+      }
+      const book = rec.book;
+      return {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        description: book.description || "",
+        amazon_url: book.amazon_url || "",
+        genre: Array.isArray(book.genre) ? book.genre.join(", ") : (book.genre || "")
+      };
+    });
+
+    return { count: commonBooks.length, books: commonBooks };
   },
 });
+
+/*
+PEOPLE
+*/
 
 // Tool to get top pairs of recommenders who recommend the most books in common
 export const getTopOverlappingRecommendersTool = createTool({
@@ -568,72 +619,6 @@ export const getTopOverlappingRecommendersTool = createTool({
   },
 });
 
-// Tool to get top genres recommended by a specific person type
-export const getTopGenresByPersonTypeTool = createTool({
-  id: "get-top-genres-by-person-type",
-  description: "Get the most recommended genres for a given person type",
-  inputSchema: z.object({ type: z.string() }),
-  outputSchema: z.object({
-    genres: z.array(
-      z.object({
-        genre: z.string(),
-        count: z.number(),
-      })
-    ),
-  }),
-  execute: async ({ context }) => {
-    const { data, error } = await supabase.rpc("get_top_genres_by_type", {
-      type_arg: context.type,
-    });
-    if (error) throw new Error(error.message);
-    return { genres: data };
-  },
-});
-
-// Tool to find pairs of types with the most similar book tastes
-export const getMostSimilarTypesTool = createTool({
-  id: "get-most-similar-types",
-  description:
-    "Find which types of people have the most similar book taste (overlapping books)",
-  inputSchema: z.object({ limit: z.number().default(10) }),
-  outputSchema: z.object({
-    pairs: z.array(
-      z.object({
-        type1: z.string(),
-        type2: z.string(),
-        shared_book_count: z.number(),
-      })
-    ),
-  }),
-  execute: async ({ context }) => {
-    const { data, error } = await supabase.rpc("get_most_similar_types", {
-      limit_arg: context.limit,
-    });
-    if (error) throw new Error(error.message);
-    return { pairs: data };
-  },
-});
-
-// Tool to find the number of genres recommended by each type of person
-export const getGenreCountByTypeTool = createTool({
-  id: "get-genre-count-by-type",
-  description: "See which types recommend the widest variety of genres",
-  inputSchema: z.object({}),
-  outputSchema: z.object({
-    results: z.array(
-      z.object({
-        type: z.string(),
-        genre_count: z.number(),
-      })
-    ),
-  }),
-  execute: async () => {
-    const { data, error } = await supabase.rpc("get_genre_count_by_type");
-    if (error) throw new Error(error.message);
-    return { results: data };
-  },
-});
-
 // Tool to find people who recommend only one genre while others in their type recommend many
 export const getGenreOutliersInTypeTool = createTool({
   id: "get-genre-outliers-in-type",
@@ -657,28 +642,7 @@ export const getGenreOutliersInTypeTool = createTool({
   },
 });
 
-// Tool to find books that are only recommended by one type of person
-export const getBooksBySingleTypeTool = createTool({
-  id: "get-books-by-single-type",
-  description: "Find books that are only recommended by one type of person",
-  inputSchema: z.object({}),
-  outputSchema: z.object({
-    books: z.array(
-      z.object({
-        book_id: z.string(),
-        title: z.string(),
-        only_type: z.string(),
-      })
-    ),
-  }),
-  execute: async () => {
-    const { data, error } = await supabase.rpc("get_books_by_single_type");
-    if (error) throw new Error(error.message);
-    return { books: data };
-  },
-});
-
-// Tool to find people who recommend across the most genres
+// Tool to find number of genres recommended by each person
 export const getMostDiverseRecommendersTool = createTool({
   id: "get-most-diverse-recommenders",
   description: "Find people who recommend across the most genres",
@@ -699,122 +663,6 @@ export const getMostDiverseRecommendersTool = createTool({
     );
     if (error) throw new Error(error.message);
     return { recommenders: data };
-  },
-});
-
-// Tool to find books recommended by the widest variety of types 
-export const getBooksWithMostTypeDiversityTool = createTool({
-  id: "get-books-with-most-type-diversity",
-  description: "Find books recommended by the widest variety of types",
-  inputSchema: z.object({ limit: z.number().default(10) }),
-  outputSchema: z.object({
-    books: z.array(
-      z.object({
-        book_id: z.string(),
-        title: z.string(),
-        type_count: z.number(),
-      })
-    ),
-  }),
-  execute: async ({ context }) => {
-    const { data, error } = await supabase.rpc(
-      "get_books_with_most_type_diversity",
-      { limit_arg: context.limit }
-    );
-    if (error) throw new Error(error.message);
-    return { books: data };
-  },
-});
-
-// Tool to find which genres are recommended by the most unique people
-export const getTopGenresByRecommendersTool = createTool({
-  id: "get-top-genres-by-recommenders",
-  description: "Find which genres are recommended by the most unique people",
-  inputSchema: z.object({ limit: z.number().default(10) }),
-  outputSchema: z.object({
-    genres: z.array(
-      z.object({
-        genre: z.string(),
-        unique_recommenders: z.number(),
-      })
-    ),
-  }),
-  execute: async ({ context }) => {
-    const { data, error } = await supabase.rpc(
-      "get_top_genres_by_recommenders",
-      { limit_arg: context.limit }
-    );
-    if (error) throw new Error(error.message);
-    return { genres: data };
-  },
-});
-
-// Tool to analyze genre overlap: avg books per recommender and vice versa
-export const getGenreOverlapStatsTool = createTool({
-  id: "get-genre-overlap-stats",
-  description:
-    "Analyze genre overlap: avg books per recommender and vice versa",
-  inputSchema: z.object({}),
-  outputSchema: z.object({
-    stats: z.array(
-      z.object({
-        genre: z.string(),
-        avg_books_per_recommender: z.number(),
-        avg_recommenders_per_book: z.number(),
-      })
-    ),
-  }),
-  execute: async () => {
-    const { data, error } = await supabase.rpc("get_genre_overlap_stats");
-    if (error) throw new Error(error.message);
-    return { stats: data };
-  },
-});
-
-// Tool to get recommendation counts per book (for popularity or power-law analysis)
-export const getRecommendationDistributionTool = createTool({
-  id: "get-recommendation-distribution",
-  description:
-    "Get recommendation counts per book (for popularity or power-law analysis)",
-  inputSchema: z.object({}),
-  outputSchema: z.object({
-    distribution: z.array(
-      z.object({
-        book_id: z.string(),
-        title: z.string(),
-        recommendation_count: z.number(),
-      })
-    ),
-  }),
-  execute: async () => {
-    const { data, error } = await supabase.rpc(
-      "get_recommendation_distribution"
-    );
-    if (error) throw new Error(error.message);
-    return { distribution: data };
-  },
-});
-
-// Tool to find books that are recommended by the most people overall
-export const getMostRecommendedBooksTool = createTool({
-  id: "get-most-recommended-books",
-  description: "Find books that are recommended by the most people overall",
-  inputSchema: z.object({ limit: z.number().default(10) }),
-  outputSchema: z.object({
-    books: z.array(
-      z.object({
-        book_id: z.string(),
-        title: z.string(),
-        recommendation_count: z.number(),
-      })
-    ),
-  }),
-  execute: async ({ context }) => {
-    const { data, error } = await supabase.rpc("get_most_recommended_books", {
-      limit_arg: context.limit,
-    });
-    if (error) throw new Error(error.message);
-    return { books: data };
   },
 });
 
@@ -878,6 +726,159 @@ export const getSimilarPeopleByDescriptionEmbeddingTool = createTool({
   },
 });
 
+// Tool to find the semantically similar people and how many books they both recommend
+export const getTopSimilarPeopleWithOverlapTool = createTool({
+  id: "get-top-similar-people-with-overlap",
+  description:
+    "Get the top semantically similar people and how many books they both recommend",
+  inputSchema: z.object({
+    limit: z.number().default(10),
+  }),
+  outputSchema: z.object({
+    pairs: z.array(
+      z.object({
+        person1_id: z.string(),
+        person1_name: z.string(),
+        person2_id: z.string(),
+        person2_name: z.string(),
+        similarity: z.number(),
+        shared_book_count: z.number(),
+      })
+    ),
+  }),
+  execute: async ({ context }) => {
+    const { data, error } = await supabase.rpc(
+      "get_top_similar_people_with_overlap",
+      {
+        limit_arg: context.limit,
+      }
+    );
+    if (error) throw new Error(error.message);
+    return { pairs: data };
+  },
+});
+
+/*
+TYPES
+*/
+
+// Tool to find pairs of types with the most similar book tastes
+export const getMostSimilarTypesTool = createTool({
+  id: "get-most-similar-types",
+  description:
+    "Find which types of people have the most similar book taste (overlapping books)",
+  inputSchema: z.object({ limit: z.number().default(10) }),
+  outputSchema: z.object({
+    pairs: z.array(
+      z.object({
+        type1: z.string(),
+        type2: z.string(),
+        shared_book_count: z.number(),
+      })
+    ),
+  }),
+  execute: async ({ context }) => {
+    const { data, error } = await supabase.rpc("get_most_similar_types", {
+      limit_arg: context.limit,
+    });
+    if (error) throw new Error(error.message);
+    return { pairs: data };
+  },
+});
+
+// Tool to find the number of genres recommended by each type of person
+export const getGenreCountByTypeTool = createTool({
+  id: "get-genre-count-by-type",
+  description: "See which types recommend the widest variety of genres",
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    results: z.array(
+      z.object({
+        type: z.string(),
+        genre_count: z.number(),
+      })
+    ),
+  }),
+  execute: async () => {
+    const { data, error } = await supabase.rpc("get_genre_count_by_type");
+    if (error) throw new Error(error.message);
+    return { results: data };
+  },
+});
+
+
+/*
+BOOKS
+*/
+
+// Tool to find books that are only recommended by one type of person
+export const getBooksBySingleTypeTool = createTool({
+  id: "get-books-by-single-type",
+  description: "Find books that are only recommended by one type of person",
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    books: z.array(
+      z.object({
+        book_id: z.string(),
+        title: z.string(),
+        only_type: z.string(),
+      })
+    ),
+  }),
+  execute: async () => {
+    const { data, error } = await supabase.rpc("get_books_by_single_type");
+    if (error) throw new Error(error.message);
+    return { books: data };
+  },
+});
+
+// Tool to find books recommended by the widest variety of types 
+export const getBooksWithMostTypeDiversityTool = createTool({
+  id: "get-books-with-most-type-diversity",
+  description: "Find books recommended by the widest variety of types",
+  inputSchema: z.object({ limit: z.number().default(10) }),
+  outputSchema: z.object({
+    books: z.array(
+      z.object({
+        book_id: z.string(),
+        title: z.string(),
+        type_count: z.number(),
+      })
+    ),
+  }),
+  execute: async ({ context }) => {
+    const { data, error } = await supabase.rpc(
+      "get_books_with_most_type_diversity",
+      { limit_arg: context.limit }
+    );
+    if (error) throw new Error(error.message);
+    return { books: data };
+  },
+});
+
+// Tool to find books that are recommended by the most people overall
+export const getMostRecommendedBooksTool = createTool({
+  id: "get-most-recommended-books",
+  description: "Find books that are recommended by the most people overall",
+  inputSchema: z.object({ limit: z.number().default(10) }),
+  outputSchema: z.object({
+    books: z.array(
+      z.object({
+        book_id: z.string(),
+        title: z.string(),
+        recommendation_count: z.number(),
+      })
+    ),
+  }),
+  execute: async ({ context }) => {
+    const { data, error } = await supabase.rpc("get_most_recommended_books", {
+      limit_arg: context.limit,
+    });
+    if (error) throw new Error(error.message);
+    return { books: data };
+  },
+});
+
 // Tool to find the top 3 books most similar in description to a given book
 export const getSimilarBooksToBookByDescriptionTool = createTool({
   id: "get-similar-books-to-book-by-description",
@@ -917,38 +918,6 @@ export const getSimilarBooksToBookByDescriptionTool = createTool({
   },
 });
 
-// Tool to find the semantically similar people and how many books they both recommend
-export const getTopSimilarPeopleWithOverlapTool = createTool({
-  id: "get-top-similar-people-with-overlap",
-  description:
-    "Get the top semantically similar people and how many books they both recommend",
-  inputSchema: z.object({
-    limit: z.number().default(10),
-  }),
-  outputSchema: z.object({
-    pairs: z.array(
-      z.object({
-        person1_id: z.string(),
-        person1_name: z.string(),
-        person2_id: z.string(),
-        person2_name: z.string(),
-        similarity: z.number(),
-        shared_book_count: z.number(),
-      })
-    ),
-  }),
-  execute: async ({ context }) => {
-    const { data, error } = await supabase.rpc(
-      "get_top_similar_people_with_overlap",
-      {
-        limit_arg: context.limit,
-      }
-    );
-    if (error) throw new Error(error.message);
-    return { pairs: data };
-  },
-});
-
 // Tool to find the semantically similar books and how many recommenders they share
 export const getTopSimilarBooksWithOverlapTool = createTool({
   id: "get-top-similar-books-with-overlap",
@@ -978,5 +947,54 @@ export const getTopSimilarBooksWithOverlapTool = createTool({
     );
     if (error) throw new Error(error.message);
     return { pairs: data };
+  },
+});
+
+/*
+GENRES
+*/
+
+// Tool to find which genres are recommended by the most unique people
+export const getTopGenresByRecommendersTool = createTool({
+  id: "get-top-genres-by-recommenders",
+  description: "Find which genres are recommended by the most unique people",
+  inputSchema: z.object({ limit: z.number().default(10) }),
+  outputSchema: z.object({
+    genres: z.array(
+      z.object({
+        genre: z.string(),
+        unique_recommenders: z.number(),
+      })
+    ),
+  }),
+  execute: async ({ context }) => {
+    const { data, error } = await supabase.rpc(
+      "get_top_genres_by_recommenders",
+      { limit_arg: context.limit }
+    );
+    if (error) throw new Error(error.message);
+    return { genres: data };
+  },
+});
+
+// Tool to analyze genre overlap: avg books per recommender and vice versa
+export const getGenreOverlapStatsTool = createTool({
+  id: "get-genre-overlap-stats",
+  description:
+    "Analyze genre overlap: avg books per recommender and vice versa",
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    stats: z.array(
+      z.object({
+        genre: z.string(),
+        avg_books_per_recommender: z.number(),
+        avg_recommenders_per_book: z.number(),
+      })
+    ),
+  }),
+  execute: async () => {
+    const { data, error } = await supabase.rpc("get_genre_overlap_stats");
+    if (error) throw new Error(error.message);
+    return { stats: data };
   },
 });
