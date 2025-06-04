@@ -1,4 +1,3 @@
-
 import pLimit from 'p-limit';
 import cliProgress from 'cli-progress';
 import { supabase } from '../services/supabase.ts';
@@ -7,14 +6,57 @@ const concurrency = 10;
 const limit = pLimit(concurrency);
 
 async function updateSimilarBooks() {
-  const { data: books, error } = await supabase
+  // First, get all books to check their IDs
+  const { data: allBookIds, error: allBooksError } = await supabase
     .from('books')
-    .select('id')
-    .is('similar_books', null)
+    .select('id');
+
+  if (allBooksError || !allBookIds) {
+    console.error('Error fetching all book IDs:', allBooksError);
+    return;
+  }
+
+  console.log(`📊 Total books in database: ${allBookIds.length}`);
+  const existingBookIds = new Set(allBookIds.map(b => b.id));
+
+  // Get books with similar_books that need checking
+  const { data: booksWithSimilar, error } = await supabase
+    .from('books')
+    .select('id, similar_books')
+    .not('similar_books', 'is', null)
     .not('description_embedding', 'is', null);
 
-  if (error || !books) {
+  if (error || !booksWithSimilar) {
     console.error('Error fetching books:', error);
+    return;
+  }
+
+  console.log(`📚 Books with similar_books column populated: ${booksWithSimilar.length}`);
+
+  // Filter books that have similar_books with IDs not in database
+  const booksToUpdate = booksWithSimilar.filter((book: any) => {
+    if (!book.similar_books || !Array.isArray(book.similar_books)) return false;
+    
+    return book.similar_books.some((similarBook: any) => {
+      const similarId = similarBook?.id;
+      return similarId && !existingBookIds.has(similarId);
+    });
+  });
+
+  console.log(`🔍 Books with missing similar book references: ${booksToUpdate.length}`);
+  
+  if (booksToUpdate.length > 0) {
+    // Log some example missing references
+    const exampleBook = booksToUpdate[0];
+    const missingIds = exampleBook.similar_books
+      .filter((sb: any) => sb?.id && !existingBookIds.has(sb.id))
+      .map((sb: any) => sb.id)
+      .slice(0, 3);
+    console.log(`   Example missing IDs from book ${exampleBook.id}: ${missingIds.join(', ')}${missingIds.length < exampleBook.similar_books.filter((sb: any) => sb?.id && !existingBookIds.has(sb.id)).length ? '...' : ''}`);
+  }
+
+  if (booksToUpdate.length === 0) {
+    console.log('✅ No books need updating');
     return;
   }
 
@@ -23,9 +65,9 @@ async function updateSimilarBooks() {
     clearOnComplete: true,
   }, cliProgress.Presets.shades_classic);
 
-  bar.start(books.length, 0);
+  bar.start(booksToUpdate.length, 0);
 
-  const tasks = books.map((book) =>
+  const tasks = booksToUpdate.map((book: any) =>
     limit(async () => {
       try {
         const { data, error } = await supabase.rpc(
@@ -51,17 +93,61 @@ async function updateSimilarBooks() {
 
   await Promise.all(tasks);
   bar.stop();
+  console.log(`✅ Updated ${booksToUpdate.length} books`);
 }
 
 async function updateSimilarPeople() {
-  const { data: people, error } = await supabase
+  // First, get all people to check their IDs
+  const { data: allPeopleIds, error: allPeopleError } = await supabase
     .from('people')
-    .select('id')
-    .is('similar_people', null)
+    .select('id');
+
+  if (allPeopleError || !allPeopleIds) {
+    console.error('Error fetching all people IDs:', allPeopleError);
+    return;
+  }
+
+  console.log(`\n📊 Total people in database: ${allPeopleIds.length}`);
+  const existingPeopleIds = new Set(allPeopleIds.map(p => p.id));
+
+  // Get people with similar_people that need checking
+  const { data: peopleWithSimilar, error } = await supabase
+    .from('people')
+    .select('id, similar_people')
+    .not('similar_people', 'is', null)
     .not('description_embedding', 'is', null);
 
-  if (error || !people) {
+  if (error || !peopleWithSimilar) {
     console.error('Error fetching people:', error);
+    return;
+  }
+
+  console.log(`👤 People with similar_people column populated: ${peopleWithSimilar.length}`);
+
+  // Filter people that have similar_people with IDs not in database
+  const peopleToUpdate = peopleWithSimilar.filter((person: any) => {
+    if (!person.similar_people || !Array.isArray(person.similar_people)) return false;
+    
+    return person.similar_people.some((similarPerson: any) => {
+      const similarId = similarPerson?.id;
+      return similarId && !existingPeopleIds.has(similarId);
+    });
+  });
+
+  console.log(`🔍 People with missing similar people references: ${peopleToUpdate.length}`);
+  
+  if (peopleToUpdate.length > 0) {
+    // Log some example missing references
+    const examplePerson = peopleToUpdate[0];
+    const missingIds = examplePerson.similar_people
+      .filter((sp: any) => sp?.id && !existingPeopleIds.has(sp.id))
+      .map((sp: any) => sp.id)
+      .slice(0, 3);
+    console.log(`   Example missing IDs from person ${examplePerson.id}: ${missingIds.join(', ')}${missingIds.length < examplePerson.similar_people.filter((sp: any) => sp?.id && !existingPeopleIds.has(sp.id)).length ? '...' : ''}`);
+  }
+
+  if (peopleToUpdate.length === 0) {
+    console.log('✅ No people need updating');
     return;
   }
 
@@ -70,9 +156,9 @@ async function updateSimilarPeople() {
     clearOnComplete: true,
   }, cliProgress.Presets.shades_classic);
 
-  bar.start(people.length, 0);
+  bar.start(peopleToUpdate.length, 0);
 
-  const tasks = people.map((person) =>
+  const tasks = peopleToUpdate.map((person: any) =>
     limit(async () => {
       try {
         const { data, error } = await supabase.rpc(
@@ -98,12 +184,15 @@ async function updateSimilarPeople() {
 
   await Promise.all(tasks);
   bar.stop();
+  console.log(`✅ Updated ${peopleToUpdate.length} people`);
 }
 
 async function main() {
-  console.log('🚀 Updating similar books and people...');
+  console.log('🚀 Updating similar books and people with missing references...');
+  console.log('=' .repeat(60));
   await updateSimilarBooks();
   await updateSimilarPeople();
+  console.log('\n' + '=' .repeat(60));
   console.log('✅ All similarities updated.');
 }
 
