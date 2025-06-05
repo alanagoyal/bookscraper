@@ -4,27 +4,47 @@ import { supabase } from '../services/supabase.ts';
 
 const concurrency = 10;
 const limit = pLimit(concurrency);
+const BATCH_SIZE = 1000; // Supabase default limit
 
 async function updateBookPercentiles() {
   console.log('📚 Calculating book recommendation percentiles...');
   
-  // Get recommendation counts for all books
-  const { data: bookCounts, error: countError } = await supabase
-    .from('recommendations')
-    .select('book_id')
-    .not('book_id', 'is', null);
-
-  if (countError || !bookCounts) {
-    console.error('Error fetching book recommendations:', countError);
-    return;
-  }
-
-  // Count occurrences for each book
+  // Get recommendation counts for all books in batches
+  console.log('📊 Fetching book recommendations in batches...');
   const bookCountMap = new Map<string, number>();
-  bookCounts.forEach(rec => {
-    const count = bookCountMap.get(rec.book_id) || 0;
-    bookCountMap.set(rec.book_id, count + 1);
-  });
+  let offset = 0;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const { data: bookCounts, error: countError } = await supabase
+      .from('recommendations')
+      .select('book_id')
+      .not('book_id', 'is', null)
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (countError) {
+      console.error('Error fetching book recommendations:', countError);
+      return;
+    }
+
+    if (!bookCounts || bookCounts.length === 0) {
+      hasMore = false;
+    } else {
+      // Count occurrences for each book in this batch
+      bookCounts.forEach(rec => {
+        const count = bookCountMap.get(rec.book_id) || 0;
+        bookCountMap.set(rec.book_id, count + 1);
+      });
+      
+      console.log(`   Processed ${offset + bookCounts.length} recommendations...`);
+      
+      if (bookCounts.length < BATCH_SIZE) {
+        hasMore = false;
+      } else {
+        offset += BATCH_SIZE;
+      }
+    }
+  }
 
   // Get all books
   const { data: allBooks, error: booksError } = await supabase
@@ -47,11 +67,9 @@ async function updateBookPercentiles() {
   const bookPercentiles = new Map<string, number>();
   allBooks.forEach(book => {
     const count = bookCountMap.get(book.id) || 0;
-    // Find position in sorted array
-    const position = allCounts.findIndex(c => c > count);
-    const percentile = position === -1 
-      ? 1.0 // If no count is greater, this is the 100th percentile (1.0 in decimal)
-      : position / allCounts.length; // Return as decimal (0.0-1.0)
+    // Count how many books have fewer recommendations
+    const booksWithFewerRecs = allCounts.filter(c => c < count).length;
+    const percentile = booksWithFewerRecs / allBooks.length;
     bookPercentiles.set(book.id, percentile);
   });
 
@@ -103,23 +121,42 @@ async function updateBookPercentiles() {
 async function updatePeoplePercentiles() {
   console.log('\n👤 Calculating people recommendation percentiles...');
   
-  // Get recommendation counts for all people
-  const { data: personCounts, error: countError } = await supabase
-    .from('recommendations')
-    .select('person_id')
-    .not('person_id', 'is', null);
-
-  if (countError || !personCounts) {
-    console.error('Error fetching person recommendations:', countError);
-    return;
-  }
-
-  // Count occurrences for each person
+  // Get recommendation counts for all people in batches
+  console.log('📊 Fetching person recommendations in batches...');
   const personCountMap = new Map<string, number>();
-  personCounts.forEach(rec => {
-    const count = personCountMap.get(rec.person_id) || 0;
-    personCountMap.set(rec.person_id, count + 1);
-  });
+  let offset = 0;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const { data: personCounts, error: countError } = await supabase
+      .from('recommendations')
+      .select('person_id')
+      .not('person_id', 'is', null)
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (countError) {
+      console.error('Error fetching person recommendations:', countError);
+      return;
+    }
+
+    if (!personCounts || personCounts.length === 0) {
+      hasMore = false;
+    } else {
+      // Count occurrences for each person in this batch
+      personCounts.forEach(rec => {
+        const count = personCountMap.get(rec.person_id) || 0;
+        personCountMap.set(rec.person_id, count + 1);
+      });
+      
+      console.log(`   Processed ${offset + personCounts.length} recommendations...`);
+      
+      if (personCounts.length < BATCH_SIZE) {
+        hasMore = false;
+      } else {
+        offset += BATCH_SIZE;
+      }
+    }
+  }
 
   // Get all people
   const { data: allPeople, error: peopleError } = await supabase
@@ -142,11 +179,9 @@ async function updatePeoplePercentiles() {
   const personPercentiles = new Map<string, number>();
   allPeople.forEach(person => {
     const count = personCountMap.get(person.id) || 0;
-    // Find position in sorted array
-    const position = allCounts.findIndex(c => c > count);
-    const percentile = position === -1 
-      ? 1.0 // If no count is greater, this is the 100th percentile (1.0 in decimal)
-      : position / allCounts.length; // Return as decimal (0.0-1.0)
+    // Count how many people have fewer recommendations
+    const peopleWithFewerRecs = allCounts.filter(c => c < count).length;
+    const percentile = peopleWithFewerRecs / allPeople.length;
     personPercentiles.set(person.id, percentile);
   });
 
