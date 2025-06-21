@@ -178,16 +178,13 @@ async function extractBookRecommendations(page: Page, personName?: string) {
     : (result as MultipleRecommenderResult).recommendations;
 }
 
-// Extract list of recommenders from the page for each category
-async function extractRecommendersList(page: Page, category: string) {
-  console.log(chalk.blue(`Extracting recommenders for category: ${category}...`));
-  
-  // Cache the observe results for finding the category section
-  const categoryResults = await page.observe(`Find the section for category "${category}"`);
-  
-  // Extract recommenders under this category heading
+// Extract list of recommenders from the page
+async function extractRecommendersList(page: Page) {
+  console.log(chalk.blue(`Extracting recommenders...`));
+
+  // Extract recommenders
   const { recommenders } = await page.extract({
-    instruction: `Extract all expert names listed under the heading "${category}". Get their names only.`,
+    instruction: `Extract all expert names listed on this page. Get their names only.`,
     schema: z.object({
       recommenders: z.array(
         z.object({
@@ -198,29 +195,18 @@ async function extractRecommendersList(page: Page, category: string) {
     useTextExtract: false, // Use HTML parsing instead of text extraction
   });
 
-  // Add category information and cached observe results to each recommender
-  const recommendersWithCategory = recommenders.map(r => ({
-    ...r,
-    category,
-    categoryResults
-  }));
-
-  return recommendersWithCategory;
+  return recommenders;
 }
 
 // Navigate to the recommender's profile
 async function navigateToRecommenderProfile(
   page: Page,
   recommenderName: string,
-  categoryResults: any
 ): Promise<string> {
-  // First observe to find the specific category section using cached results
-  await page.act(categoryResults[0]);
-  
-  // Then click the specific name within that section
+  // Click the specific name within that section
   const nameResults = await page.observe({
-    instruction: `Click on ${recommenderName}'s profile or name within the current section`,
-    onlyVisible: true // Ensure we only target visible elements in the current section
+    instruction: `Click on ${recommenderName}'s profile or name`,
+    onlyVisible: true // Ensure we only target visible elements
   });
   
   await page.act(nameResults[0]);
@@ -454,123 +440,85 @@ export async function main({
 
     if (urlType === "collection") {
       // Original flow for collection of recommenders
-      console.log(chalk.blue("Processing recommenders by category..."));
+      console.log(chalk.blue("Processing recommenders..."));
 
-      // Process each category
-      const categories = [
-        "Novelists",
-        "Painters",
-        "Philosophers",
-        "Photographers",
-        "Physicists",
-        "Poets",
-        "Policemen",
-        "Policy Analysts",
-        "Political Commentators",
-        "Political Scientists",
-        "Politicians",
-        "Psychologists",
-        "Publishers",
-        "Science Writers",
-        "Scientists",
-        "Short Story Writers",
-        "Social Scientists",
-        "Sociologists",
-        "Sportspersons & Sportswriters",
-        "Teachers",
-        "Technologists",
-        "Theatre Critics",
-        "Theologians & Historians of Religion",
-        "Thriller and Crime Writers",
-        "Translators",
-        "Travel Writers",
-      ];
+      // Extract recommenders
+      const recommenders = await extractRecommendersList(page);
 
-      for (const category of categories) {
-        console.log(chalk.green(`\n=== Processing Category: ${category} ===`));
-        
-        // Extract recommenders for this category
-        const recommenders = await extractRecommendersList(page, category);
+      if (!recommenders || recommenders.length === 0) {
+        console.log(chalk.yellow(`No recommenders found.`));
+        return;
+      }
 
-        if (!recommenders || recommenders.length === 0) {
-          console.log(chalk.yellow(`No recommenders found for category: ${category}`));
-          continue;
+      console.log(chalk.green(`Found ${recommenders.length} recommenders.`));
+
+      // Check which recommenders are already in the database
+      console.log(
+        chalk.blue("\nChecking existing recommenders in database...")
+      );
+      const recommenderStatus = await Promise.all(
+        recommenders.map(async (recommender) => {
+          const existingId = await checkExistingPerson(recommender.name);
+          return {
+            name: recommender.name,
+            exists: !!existingId,
+            id: existingId,
+          };
+        })
+      );
+
+      // Log the plan
+      console.log(chalk.blue("\nProcessing plan:"));
+      recommenderStatus.forEach((recommender) => {
+        if (recommender.exists) {
+          console.log(
+            chalk.yellow(`- ${recommender.name} (already in database)`)
+          );
+        } else {
+          console.log(chalk.green(`- ${recommender.name} (will process)`));
         }
+      });
 
-        console.log(chalk.green(`Found ${recommenders.length} recommenders in this category`));
+      // Process each recommender
+      for (const recommender of recommenderStatus) {
+        try {
+          console.log(
+            chalk.blue("\nFound recommender:"),
+            chalk.white(recommender.name)
+          );
 
-        // Check which recommenders are already in the database
-        console.log(
-          chalk.blue("\nChecking existing recommenders in database...")
-        );
-        const recommenderStatus = await Promise.all(
-          recommenders.map(async (recommender) => {
-            const existingId = await checkExistingPerson(recommender.name);
-            return {
-              name: recommender.name,
-              exists: !!existingId,
-              id: existingId,
-              category: recommender.category,
-              categoryResults: recommender.categoryResults
-            };
-          })
-        );
-
-        // Log the plan for this category
-        console.log(chalk.blue("\nProcessing plan for this category:"));
-        recommenderStatus.forEach((recommender) => {
+          // Skip existing recommenders
           if (recommender.exists) {
             console.log(
-              chalk.yellow(`- ${recommender.name} (already in database)`)
+              chalk.yellow(`Skipping ${recommender.name} (already in database)`)
             );
-          } else {
-            console.log(chalk.green(`- ${recommender.name} (will process)`));
-          }
-        });
-
-        // Process each recommender in this category
-        for (const recommender of recommenderStatus) {
-          try {
-            console.log(
-              chalk.blue("\nFound recommender:"),
-              chalk.white(recommender.name)
-            );
-
-            // Skip existing recommenders
-            if (recommender.exists) {
-              console.log(
-                chalk.yellow(`Skipping ${recommender.name} (already in database)`)
-              );
-              continue;
-            }
-
-            // Automatically process new recommenders
-            console.log(
-              chalk.green(`Processing ${recommender.name} (new recommender)`)
-            );
-
-            // Navigate to recommender's profile by clicking their name
-            console.log(chalk.blue("Navigating to recommender's profile..."));
-            const currentUrl = await navigateToRecommenderProfile(
-              page,
-              recommender.name,
-              recommender.categoryResults
-            );
-
-            await processRecommender(page, recommender.name, currentUrl, url);
-          } catch (error) {
-            console.error(
-              chalk.red(`Error processing recommender "${recommender.name}":`)
-            );
-            console.error(error);
-            // Try to go back to main page before continuing
-            await page.goto(url);
             continue;
           }
-        }
 
-        console.log(chalk.green(`\n✓ Completed processing category: ${category}`));
+          // Automatically process new recommenders
+          console.log(
+            chalk.green(`Processing ${recommender.name} (new recommender)`)
+          );
+
+          // Navigate to recommender's profile by clicking their name
+          console.log(chalk.blue("Navigating to recommender's profile..."));
+          const currentUrl = await navigateToRecommenderProfile(
+            page,
+            recommender.name,
+          );
+
+          await processRecommender(page, recommender.name, currentUrl, url);
+        } catch (error) {
+          console.error(
+            chalk.red(`Error processing recommender "${recommender.name}":`)
+          );
+          console.error(error);
+          // Try to go back to main page before continuing
+          await page.goto(url);
+        }
       }
+
+      console.log(chalk.green(`\n✓ Completed processing.`));
     } else if (urlType === "multiple") {
       // New flow for multiple recommenders
       console.log(chalk.blue("Extracting book recommendations..."));
