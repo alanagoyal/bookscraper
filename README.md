@@ -1,41 +1,41 @@
-# 🤘 Welcome to Stagehand!
+# 🤘 welcome to stagehand!
 
-Hey! This is a project built with [Stagehand](https://github.com/browserbase/stagehand).
+hey! this is a project built with [stagehand](https://github.com/browserbase/stagehand).
 
-You can build your own web agent using: `npx create-browser-app`!
+you can build your own web agent using: `npx create-browser-app`!
 
-## Setting the Stage
+## setting the stage
 
-Stagehand is an SDK for automating browsers. It's built on top of [Playwright](https://playwright.dev/) and provides a higher-level API for better debugging and AI fail-safes.
+stagehand is an sdk for automating browsers. it's built on top of [playwright](https://playwright.dev/) and provides a higher-level api for better debugging and ai fail-safes.
 
-## Curtain Call
+## curtain call
 
-Get ready for a show-stopping development experience. Just run:
+get ready for a show-stopping development experience. just run:
 
 ```bash
 npm install && npm start
 ```
 
-## What's Next?
+## what's next?
 
-### Add your API keys
+### add your api keys
 
-Required API keys/environment variables are in the `.env.example` file. Copy it to `.env` and add your API keys.
+required api keys/environment variables are in the `.env.example` file. copy it to `.env` and add your api keys.
 
 ```bash
 cp .env.example .env && nano .env # Add your API keys to .env
 ```
 
-### Custom .cursorrules
+### custom .cursorrules
 
-We have custom .cursorrules for this project. It'll help quite a bit with writing Stagehand easily.
+we have custom .cursorrules for this project. it'll help quite a bit with writing stagehand easily.
 
-### Run on Browserbase
+### run on browserbase
 
-To run on Browserbase, add your API keys to .env and change `env: "LOCAL"` to `env: "BROWSERBASE"` in [stagehand.config.ts](stagehand.config.ts).
+to run on browserbase, add your api keys to .env and change `env: "LOCAL"` to `env: "BROWSERBASE"` in [stagehand.config.ts](stagehand.config.ts).
 
-### Use Anthropic Claude 3.5 Sonnet
+### use anthropic claude 3.5 sonnet
 
-1. Add your API key to .env
-2. Change `modelName: "gpt-4o"` to `modelName: "claude-3-5-sonnet-latest"` in [stagehand.config.ts](stagehand.config.ts)
-3. Change `modelClientOptions: { apiKey: process.env.OPENAI_API_KEY }` to `modelClientOptions: { apiKey: process.env.ANTHROPIC_API_KEY }` in [stagehand.config.ts](stagehand.config.ts)
+1. add your api key to .env
+2. change `modelName: "gpt-4o"` to `modelName: "claude-3-5-sonnet-latest"` in [stagehand.config.ts](stagehand.config.ts)
+3. change `modelClientOptions: { apiKey: process.env.OPENAI_API_KEY }` to `modelClientOptions: { apiKey: process.env.ANTHROPIC_API_KEY }` in [stagehand.config.ts](stagehand.config.ts)
